@@ -121,31 +121,37 @@
       <!-- Skip Cutscene -->
       <button id="btn-skip-cutscene" class="hidden" type="button">تخطي ⏭</button>
 
-      <!-- Minimalist Landscape Touch Controls (Zero Visual Clutter!) -->
+      <!-- PUBG-Style Floating Joystick (with Integrated Sprint) + Jump Button -->
       <div id="touch-controls-layer">
-        <!-- Left Subtle Floating Joystick -->
-        <div id="joystick-zone" aria-label="الحركة">
-          <div id="joystick-base">
-            <div id="joystick-knob"></div>
+        <!-- Left Zone: Invisible until touched; Joystick spawns right under thumb! -->
+        <div id="joystick-zone" aria-label="الحركة والركض">
+          <div id="joystick-float-wrap" class="hidden">
+            <div id="joystick-sprint-lock">
+              <span class="lock-arrow">↑</span>
+              <span>ركض</span>
+            </div>
+            <div id="joystick-base">
+              <div id="joystick-knob"></div>
+            </div>
           </div>
         </div>
 
         <!-- Right High-Sensitivity Touch Look Pad -->
         <div id="look-zone" aria-label="النظر"></div>
 
-        <!-- Bottom-Right Ergonomic Action Cluster (ONLY Sprint + Contextual Interact!) -->
+        <!-- Bottom-Right Ergonomic Action Cluster (Jump + Contextual Interact) -->
         <div id="right-action-cluster">
           <button id="btn-mobile-interact" class="interact-pill-btn hidden" type="button">
             <span class="interact-glyph">◈</span>
             <span id="mobile-interact-text">فحص</span>
           </button>
 
-          <button id="btn-mobile-sprint" class="sprint-circle-btn" type="button" aria-label="ركض">
-            <svg class="stamina-svg" viewBox="0 0 56 56" width="56" height="56">
-              <circle class="stamina-bg" cx="28" cy="28" r="24" />
-              <circle id="sprint-stamina-arc" class="stamina-fg" cx="28" cy="28" r="24" />
+          <button id="btn-mobile-jump" class="jump-circle-btn" type="button" aria-label="قفز">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="18 15 12 9 6 15"></polyline>
+              <line x1="12" y1="9" x2="12" y2="20"></line>
             </svg>
-            <span class="sprint-label">ركض</span>
+            <span>قفز</span>
           </button>
         </div>
       </div>

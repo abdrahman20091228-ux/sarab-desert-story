@@ -195,6 +195,9 @@ export class DesertWorld {
       dummy.scale.set(m.sx, m.sy, m.sz);
       dummy.updateMatrix();
       inst.setMatrixAt(idx, dummy.matrix);
+
+      // Register solid hill/mesa collision so player can NEVER walk inside them like air!
+      this.physics.addMesaCollider(m.x, m.z, m.sx, m.sz, m.ry, gy - 2.0, m.sy);
     });
     inst.instanceMatrix.needsUpdate = true;
     this.group.add(inst);
@@ -292,7 +295,9 @@ export class DesertWorld {
       dummy.updateMatrix();
       shadowInst.setMatrixAt(idx, dummy.matrix);
 
-      this.physics.addEllipseCollider(p.x, p.z, p.sx * 1.08, p.sz * 1.08, p.ry, y + p.sy + 1.6);
+      // Gentle climbable rock collider (true topY allows stepping/jumping right onto rocks!)
+      const rockTopY = y + p.sy * 0.56;
+      this.physics.addEllipseCollider(p.x, p.z, p.sx, p.sz, p.ry, rockTopY, true);
     });
 
     instMesh.instanceMatrix.needsUpdate = true;

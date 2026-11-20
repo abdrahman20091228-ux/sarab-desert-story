@@ -567,7 +567,7 @@ html, body {
   cursor: pointer;
 }
 
-/* ==================== RADICALLY CLEAN MOBILE CONTROLS ==================== */
+/* ==================== PUBG FLOATING JOYSTICK + JUMP BUTTON ==================== */
 #touch-controls-layer {
   position: absolute;
   inset: 0;
@@ -578,41 +578,79 @@ html, body {
 #joystick-zone {
   position: absolute;
   left: 0;
+  top: 56px;
   bottom: 0;
-  width: 38%;
-  height: 68%;
+  width: 44%;
   pointer-events: auto;
   touch-action: none;
 }
 
-#joystick-base {
+#joystick-float-wrap {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#joystick-sprint-lock {
   position: absolute;
-  left: max(26px, env(safe-area-inset-left));
-  bottom: max(24px, env(safe-area-inset-bottom));
-  width: 102px;
-  height: 102px;
+  bottom: 122px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: rgba(255, 245, 228, 0.05);
-  border: 1.5px solid rgba(255, 240, 214, 0.22);
+  background: rgba(16, 11, 6, 0.45);
+  border: 1.5px solid rgba(255, 240, 214, 0.35);
+  color: rgba(255, 244, 224, 0.85);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+#joystick-sprint-lock.engaged {
+  transform: translateX(-50%) scale(1.18);
+  background: rgba(224, 140, 42, 0.88);
+  border-color: #fff2cc;
+  color: #fff;
+}
+
+.lock-arrow {
+  font-size: 0.78rem;
+  margin-bottom: 1px;
+}
+
+#joystick-base {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: rgba(16, 11, 6, 0.24);
+  border: 1.5px solid rgba(255, 240, 214, 0.46);
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.52;
-  transition: opacity 0.15s ease, border-color 0.15s ease;
 }
 
-#joystick-base.active {
-  opacity: 0.95;
-  border-color: rgba(246, 212, 152, 0.68);
-  background: rgba(16, 11, 6, 0.24);
+#joystick-base.sprinting {
+  border-color: #f6c46a;
+  box-shadow: 0 0 14px rgba(246, 196, 106, 0.38);
 }
 
 #joystick-knob {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: rgba(255, 240, 214, 0.72);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  background: rgba(255, 244, 224, 0.84);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.38);
   transform: translate(0, 0);
   will-change: transform;
 }
@@ -620,14 +658,13 @@ html, body {
 #look-zone {
   position: absolute;
   right: 0;
-  top: 58px;
+  top: 56px;
   bottom: 0;
-  width: 62%;
+  width: 56%;
   pointer-events: auto;
   touch-action: none;
 }
 
-/* Bottom-Right Minimal Ergonomic Cluster */
 #right-action-cluster {
   position: absolute;
   right: max(22px, env(safe-area-inset-right));
@@ -665,59 +702,30 @@ html, body {
   color: #fff2cc;
 }
 
-/* Clean Circular Sprint Button with Built-in Stamina Ring */
-.sprint-circle-btn {
+.jump-circle-btn {
   pointer-events: auto;
-  position: relative;
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  border: none;
-  background: rgba(16, 11, 6, 0.48);
-  color: rgba(255, 246, 228, 0.9);
+  border: 1.5px solid rgba(255, 240, 214, 0.42);
+  background: rgba(16, 11, 6, 0.46);
+  color: #fff8eb;
   font-family: var(--font-ui);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0px;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.15s ease;
+  transition: transform 0.1s ease, background 0.12s ease;
 }
 
-.sprint-circle-btn.active {
-  background: rgba(208, 128, 42, 0.82);
-  color: #fff;
-}
-
-.sprint-circle-btn:active {
-  transform: scale(0.93);
-}
-
-.stamina-svg {
-  position: absolute;
-  inset: 1px;
-  transform: rotate(-90deg);
-  pointer-events: none;
-}
-
-.stamina-bg {
-  fill: none;
-  stroke: rgba(255, 240, 212, 0.16);
-  stroke-width: 2.5;
-}
-
-.stamina-fg {
-  fill: none;
-  stroke: #f6c46a;
-  stroke-width: 2.8;
-  stroke-linecap: round;
-  stroke-dasharray: 150.8;
-  stroke-dashoffset: 0;
-}
-
-.sprint-label {
-  position: relative;
-  z-index: 2;
+.jump-circle-btn:active {
+  transform: scale(0.92);
+  background: rgba(214, 134, 48, 0.72);
+  border-color: #fff2cc;
 }
 
 /* ==================== BORDERLESS MOVIE SUBTITLES ==================== */
