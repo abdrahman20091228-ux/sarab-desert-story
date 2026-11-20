@@ -1,13 +1,13 @@
-import { toArabicDigits } from '../gameplay/StoryManager.js';
-
 /**
- * Orchestrates all Cinematic Arabic UI Screens, Settings Modal, HUD, Inspect Cards, and Orientation Hints.
+ * Orchestrates Mandatory Fullscreen Gate, Title Screen, Ultra-Clean Single-Mission HUD,
+ * Settings Modal, Inspection Cards, Ending Screen, and Orientation Hints.
  */
 export class UIManager {
   constructor(settings, audio) {
     this.settings = settings;
     this.audio = audio;
 
+    this.fullscreenGate = document.getElementById('fullscreen-gate');
     this.titleScreen = document.getElementById('title-screen');
     this.hudLayer = document.getElementById('hud-layer');
     this.settingsModal = document.getElementById('settings-modal');
@@ -16,24 +16,20 @@ export class UIManager {
     this.endingScreen = document.getElementById('ending-screen');
     this.portraitWarning = document.getElementById('portrait-warning');
 
+    this.missionTextEl = document.getElementById('hud-mission-text');
+    this.missionDistEl = document.getElementById('hud-mission-dist');
     this.clockEl = document.getElementById('hud-clock');
-    this.phaseEl = document.getElementById('hud-phase-label');
     this.sunIconEl = document.getElementById('hud-sun-icon');
-    this.objTextEl = document.getElementById('hud-objective-text');
-    this.cluesCountEl = document.getElementById('hud-clues-count');
     this.fpsEl = document.getElementById('hud-fps-counter');
 
     this.reticleDot = document.getElementById('reticle-dot');
-    this.interactPrompt = document.getElementById('interact-prompt');
-    this.interactLabel = document.getElementById('interact-label');
     this.mobileInteractBtn = document.getElementById('btn-mobile-interact');
     this.mobileInteractText = document.getElementById('mobile-interact-text');
-    this.mobileSkipTimeBtn = document.getElementById('btn-mobile-skip-time');
+    this.restoreFsBtn = document.getElementById('btn-restore-fs');
     this.returnTitleBtn = document.getElementById('btn-return-title');
 
     this.onStartGame = null;
     this.onInteract = null;
-    this.onSkipTime = null;
     this.onPauseToggle = null;
     this.onReturnToTitle = null;
     this.onFreeRoam = null;
@@ -45,14 +41,56 @@ export class UIManager {
     this.inGameplay = false;
 
     this._bindButtons();
+    this._bindFullscreenMonitor();
     this._syncSettingsUI();
     this._checkOrientation();
     window.addEventListener('resize', () => this._checkOrientation());
   }
 
+  async enterMandatoryFullscreen() {
+    this.audio.unlock();
+    try {
+      const el = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch {
+      // Graceful fallback on browsers that block programmatic fullscreen (e.g., iOS Safari)
+    }
+
+    this.fullscreenGate?.classList.remove('active');
+    setTimeout(() => this.fullscreenGate?.classList.add('hidden'), 380);
+    this.showTitleScreen();
+  }
+
+  _bindFullscreenMonitor() {
+    const syncFsButton = () => {
+      const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      this.restoreFsBtn?.classList.toggle('hidden', isFs);
+    };
+    document.addEventListener('fullscreenchange', syncFsButton);
+    document.addEventListener('webkitfullscreenchange', syncFsButton);
+
+    this.restoreFsBtn?.addEventListener('click', () => {
+      this.enterMandatoryFullscreen();
+    });
+  }
+
   _bindButtons() {
+    document.getElementById('btn-enter-fullscreen')?.addEventListener('click', () => {
+      this.enterMandatoryFullscreen();
+    });
+
     document.getElementById('btn-start-game')?.addEventListener('click', () => {
       this.audio.unlock();
+      // Re-assert fullscreen on game start if not already active
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
       this.hideTitleScreen();
       this.onStartGame?.();
     });
@@ -99,12 +137,8 @@ export class UIManager {
       cb?.();
     });
 
-    // Interact triggers (both reticle pill tap & mobile right-thumb button)
-    this.interactPrompt?.addEventListener('click', () => this.onInteract?.());
     this.mobileInteractBtn?.addEventListener('click', () => this.onInteract?.());
-    this.mobileSkipTimeBtn?.addEventListener('click', () => this.onSkipTime?.());
 
-    // Ending buttons
     document.getElementById('btn-free-roam')?.addEventListener('click', () => {
       this.endingScreen?.classList.add('hidden');
       this.endingScreen?.classList.remove('active');
@@ -123,7 +157,6 @@ export class UIManager {
       this.portraitWarning?.classList.add('hidden');
     });
 
-    // Keyboard shortcuts (E to interact, Escape to pause/settings)
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyE' && this.inGameplay && !this.isModalOpen) {
         this.onInteract?.();
@@ -136,12 +169,10 @@ export class UIManager {
       }
     });
 
-    // Settings Controls Binding
     const qualityGroup = document.getElementById('opt-quality');
     qualityGroup?.querySelectorAll('button').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const val = btn.dataset.val;
-        this.settings.applyQualityPreset(val);
+        this.settings.applyQualityPreset(btn.dataset.val);
         this._syncSettingsUI();
       });
     });
@@ -209,6 +240,11 @@ export class UIManager {
     this.portraitWarning.classList.toggle('hidden', !isNarrowPortrait);
   }
 
+  dismissGateForDebug() {
+    this.fullscreenGate?.classList.remove('active');
+    this.fullscreenGate?.classList.add('hidden');
+  }
+
   showTitleScreen() {
     this.inGameplay = false;
     this.hudLayer?.classList.add('hidden');
@@ -220,7 +256,7 @@ export class UIManager {
 
   hideTitleScreen() {
     this.titleScreen?.classList.remove('active');
-    setTimeout(() => this.titleScreen?.classList.add('hidden'), 650);
+    setTimeout(() => this.titleScreen?.classList.add('hidden'), 450);
   }
 
   showHUD() {
@@ -234,9 +270,7 @@ export class UIManager {
   }
 
   openSettings(fromGameplay) {
-    if (document.pointerLockElement) {
-      document.exitPointerLock?.();
-    }
+    if (document.pointerLockElement) document.exitPointerLock?.();
     this._syncSettingsUI();
     this.returnTitleBtn?.classList.toggle('hidden', !fromGameplay);
     this.settingsModal?.classList.remove('hidden');
@@ -245,9 +279,7 @@ export class UIManager {
   }
 
   openInspectModal(tag, title, body, onClose) {
-    if (document.pointerLockElement) {
-      document.exitPointerLock?.();
-    }
+    if (document.pointerLockElement) document.exitPointerLock?.();
     document.getElementById('inspect-tag').textContent = tag;
     document.getElementById('inspect-title').textContent = title;
     document.getElementById('inspect-body').textContent = body;
@@ -264,39 +296,35 @@ export class UIManager {
     requestAnimationFrame(() => this.endingScreen?.classList.add('active'));
   }
 
-  updateClock(clockText, phaseText, timeOfDay) {
+  updateMission(text, distText) {
+    if (this.missionTextEl && this.missionTextEl.textContent !== text) {
+      this.missionTextEl.textContent = text;
+    }
+    if (this.missionDistEl) {
+      if (distText) {
+        this.missionDistEl.textContent = distText;
+        this.missionDistEl.classList.remove('hidden');
+      } else {
+        this.missionDistEl.classList.add('hidden');
+      }
+    }
+  }
+
+  updateClock(clockText, timeOfDay) {
     if (this.clockEl) this.clockEl.textContent = clockText;
-    if (this.phaseEl) this.phaseEl.textContent = phaseText;
     if (this.sunIconEl) {
       this.sunIconEl.style.color = timeOfDay > 0.65 ? '#ff9d42' : '#ffe08a';
     }
   }
 
-  updateObjective(text) {
-    if (this.objTextEl) this.objTextEl.textContent = text;
-  }
-
-  updateClues(found, total) {
-    if (this.cluesCountEl) {
-      this.cluesCountEl.textContent = `${toArabicDigits(found)} / ${toArabicDigits(total)}`;
-    }
-  }
-
-  setTimeSkipButtonVisible(visible) {
-    this.mobileSkipTimeBtn?.classList.toggle('hidden', !visible);
-  }
-
   updateInteractPrompt(interactable) {
     if (!interactable) {
       this.reticleDot?.classList.remove('interactive');
-      this.interactPrompt?.classList.add('hidden');
       this.mobileInteractBtn?.classList.add('hidden');
       return;
     }
     this.reticleDot?.classList.add('interactive');
-    if (this.interactLabel) this.interactLabel.textContent = interactable.label;
     if (this.mobileInteractText) this.mobileInteractText.textContent = interactable.label;
-    this.interactPrompt?.classList.remove('hidden');
     this.mobileInteractBtn?.classList.remove('hidden');
   }
 

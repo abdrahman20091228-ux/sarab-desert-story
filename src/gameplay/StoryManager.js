@@ -1,9 +1,8 @@
 /**
- * Arabic Narrative Engine for SARAB — Chapter 1 (الظهر -> العصر)
- * - Silent protagonist inner monologue displayed at screen bottom
- * - Synchronized procedural typewriter blip SFX per Arabic character
- * - ~5-minute organic Noon -> Asr lighting arc + cinematic Time-Skip story beats
- * - 6 interconnected environmental clues building to the Chapter 1 cliffhanger
+ * Strictly Sequential Guided Arabic Story Engine — SARAB Chapter I (الظهر -> العصر)
+ * - Displays ONLY ONE crystal-clear current mission at top-center ("المهمة: ...") + live distance
+ * - Future objectives stay completely invisible and locked until the current objective is completed
+ * - Cohesive, gripping mystery arc with smooth continuous lighting shifts (no jarring cuts!)
  */
 
 const ARABIC_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -12,86 +11,104 @@ export function toArabicDigits(input) {
   return String(input).replace(/\d/g, (d) => ARABIC_DIGITS[Number(d)]);
 }
 
-const CLUE_DATA = {
-  compass: {
-    tag: 'الدليل ١ — بجانب صخرة الاستيقاظ',
+const MISSIONS = [
+  {
+    id: 'compass',
+    objective: 'تفحّص البوصلة الملقاة على الصخرة القريبة لمعرفة اتجاهك',
+    tag: 'المهمة ١ من ٦ — الصحراء المفتوحة',
     title: 'بوصلة نحاسية محطمة',
+    sfx: 'paper',
     inspectText:
-      'الزجاج مشقوق بفعل حرارة الصحراء، لكن الإبرة لم تتوقف... إنها ترتجف بعناد وتشير مباشرة نحو برج الهوائي فوق البيت المهجور بدلاً من الشمال.\n\nنُقش على ظهرها: «محطة الرصد — القطاع ٧».',
+      'الزجاج مشقوق بفعل الشمس، لكن الإبرة لم تتوقف... إنها ترتجف بعناد وتشير مباشرةً نحو برج الهوائي فوق البيت المهجور بدلاً من الشمال.\n\nنُقش على ظهرها: «محطة الرصد — القطاع ٧».',
     lines: [
-      { text: 'إبرة البوصلة لا تشير إلى الشمال... إنها تنجذب نحو ذلك الهوائي الصدئ فوق البيت.', style: 'thought' },
-      { text: 'ما الذي يبثّ مجالاً بهذه القوة وسط هذه الصحراء الميتة؟', style: 'thought' },
+      { text: 'إبرة البوصلة لا تشير للشمال... شيء ما داخل ذلك البيت المهجور يجذبها بقوة.', style: 'thought' },
+      { text: 'هناك آثار أقدام تقود نحو حطام سيارة مدفونة في الرمل... سأتفقدها أولاً.', style: 'thought' },
     ],
-    timeTarget: 0.14,
-    skipClock: null, // First clue advances subtly without full curtain
+    timeTarget: 0.16,
+    whisperClock: null,
   },
-  canteen: {
-    tag: 'الدليل ٢ — مظلة البيت المهجور',
-    title: 'حقيبة البعثة وزمزمية فارغة',
+  {
+    id: 'jeep',
+    objective: 'اتبع آثار الأقدام وتفتّش حطام سيارة البعثة المدفونة في الرمل',
+    tag: 'المهمة ٢ من ٦ — طريق البعثة',
+    title: 'حطام سيارة الدفع الرباعي وبطاقة هوية',
+    sfx: 'metal',
     inspectText:
-      'الزمزمية جافة تماماً كأنها تُركت منذ أسابيع. داخل الحقيبة الجلدية بطاقة قماشية باهتة:\n\n«بعثة وادي الصمت الجيولوجية — ١٩٩٨»\nوعلى طرفها عبارة محفورة بعجلة:\n«لا تبقَ خارج الجدران إذا مال الظلّ نحو العصر.»',
+      'السيارة غارقة في الرمال منذ أيام، ومحرّكها محترق كأن موجة كهرومغناطيسية ضربتها فجأة.\n\nعلى المقعد الأمامي وجدتَ بطاقة تعريفية تحمل صورتك أنت:\n«المهندس نادر العتيبي — قائد بعثة وادي الصمت الجيولوجية».',
     lines: [
-      { text: 'بعثة وادي الصمت... لماذا يبدو هذا الاسم مألوفاً إلى هذا الحد؟', style: 'thought' },
-      { text: 'تحذير من البقاء في الخارج بعد العصر... يجب أن أدخل البيت وأفتّشه قبل أن تنخفض الشمس.', style: 'thought' },
+      { text: 'هذه صورتي... اسمي نادر! لماذا لا أذكر شيئاً عن هذه الحادثة؟', style: 'thought' },
+      { text: 'المعدات مفقودة من السيارة... لا بد أن الفريق نقلها إلى ساحة البيت المهجور.', style: 'thought' },
     ],
-    timeTarget: 0.30,
-    skipClock: '١:٢٥ ظهراً',
-    skipPhase: 'بعد الظهيرة — الظلال تبدأ بالامتداد',
+    timeTarget: 0.34,
+    whisperClock: '١:٢٥ ظهراً',
+    whisperPhase: 'بعد الظهيرة — وهج الرمال يشتد',
   },
-  journal: {
-    tag: 'الدليل ٣ — المكتب الخشبي داخل البيت',
-    title: 'دفتر ملاحظات نادر (مبتور الصفحات)',
+  {
+    id: 'canteen',
+    objective: 'ادخل ساحة البيت المهجور وتفقّد حقيبة البعثة تحت المظلة',
+    tag: 'المهمة ٣ من ٦ — فناء البيت المهجور',
+    title: 'حقيبة البعثة وتحذير مكتوب بعجلة',
+    sfx: 'paper',
     inspectText:
-      'الخطّ... إنه خطّ يدي أنا!\n\n«اليوم السادس — اسمي نادر. جئنا أربعة باحثين لتتبع ترددٍ صوتيٍّ غريب ينبعث من عمق الرمال. قبل ثلاث ليالٍ اختفى الجميع أثناء العاصفة.\n\nإذا استيقظتَ في الرمال وفقدتَ ذاكرتك مجدداً... فلا تصدّق السراب. أعد توصيل قاطع برج الهوائي في الجدار الشرقي، ثم افتح المذياع على التردد ٤٤.»',
+      'الزمزمية جافة تماماً. لكن داخل جيب الحقيبة ورقة مطوية بيدٍ مرتجفة:\n\n«نادر... النبضة الصوتية القادمة من أسفل البيت تمحو الذاكرة القريبة! إذا استيقظتَ تائهاً في الكثبان، ادخل غرفة مكتبك بالداخل واقرأ دفترك فوراً قبل حلول العصر.»',
     lines: [
-      { text: 'اسمي نادر... وهذا خطّي! لقد كنتُ جزءاً من هذه البعثة...', style: 'journal' },
-      { text: '«أعد توصيل قاطع برج الهوائي في الجدار الشرقي، ثم شغّل المذياع...»', style: 'thought' },
+      { text: 'النبضة تحت البيت هي سبب فقدان ذاكرتي! وأنا من كتب التحذير لنفسي...', style: 'thought' },
+      { text: 'يجب أن أدخل البيت الآن وأجد دفتري في غرفة المكتب اليسرى.', style: 'thought' },
     ],
     timeTarget: 0.52,
-    skipClock: '٢:٤٠ بعد الظهر',
-    skipPhase: 'الشمس تميل غرباً فوق الكثبان',
+    whisperClock: '٢:٣٥ بعد الظهر',
+    whisperPhase: 'الشمس تبدأ بالميل غرباً',
   },
-  well_photo: {
-    tag: 'الدليل ٤ — البئر الجافة خلف البيت',
-    title: 'صورة فوتوغرافية باهتة',
+  {
+    id: 'journal',
+    objective: 'ادخل غرفة المكتب (الجهة اليسرى داخل البيت) واقرأ دفتر ملاحظاتك',
+    tag: 'المهمة ٤ من ٦ — مكتب البحث الداخلي',
+    title: 'دفتر ملاحظات نادر — اليوم السادس',
+    sfx: 'paper',
     inspectText:
-      'صورة تآكلت حوافها بفعل الرمل: أربعة أشخاص يقفون مبتسمين أمام هذا البيت بالذات، وخلفهم برج الهوائي.\n\nأحدهم يقف بجوار بابٍ حديديٍّ أرضيٍّ داخل الغرفة الرئيسية، وقد كُتب خلف الصورة:\n«المفتاح المغناطيسي للقبو يعمل مع تردد المذياع ٤٤.»',
+      '«عثرنا على ممرٍّ خرسانيٍّ قديم أسفل هذا البيت، يعلوه باب قبوٍ حديديٍّ وسط الردهة.\n\nنزل زملائي الثلاثة بالأمس لتتبع مصدر الإشارة ثم أُغلق القفل المغناطيسي عليهم!\nلا يُفتح القبو إلا بتشغيل المذياع على التردد ٤٤ — لكن برج الهوائي مفصول. اخرج للباحة الخلفية قرب النخيل وارفع قاطع البرج أولاً.»',
     lines: [
-      { text: 'أربعة أشخاص في الصورة... وأنا أحدهم. لكن أين اختفى الثلاثة الآخرون؟', style: 'thought' },
-      { text: 'الباب الحديدي في أرضية البيت... إنه مفتاح القبو السري.', style: 'thought' },
+      { text: 'زملائي محاصرون في القبو تحت قدميّ الآن... منذ الأمس!', style: 'journal' },
+      { text: 'سأخرج من الباب الخلفي نحو النخيل وأرفع قاطع برج الهوائي فوراً.', style: 'thought' },
     ],
-    timeTarget: 0.72,
-    skipClock: '٣:٣٥ قبيل العصر',
-    skipPhase: 'الرمال تكتسي بوهج ذهبي دافئ',
+    timeTarget: 0.74,
+    whisperClock: '٣:٤٠ قبيل العصر',
+    whisperPhase: 'الرمال تكتسي بلون ذهبي دافئ',
   },
-  antenna_box: {
-    tag: 'الدليل ٥ — الجدار الشرقي الخارجي',
-    title: 'قاطع برج الهوائي والرياح',
+  {
+    id: 'antenna_box',
+    objective: 'اخرج من الباب الخلفي نحو النخيل وشغّل قاطع برج الهوائي',
+    tag: 'المهمة ٥ من ٦ — الباحة الخلفية',
+    title: 'إعادة التيار الاحتياطي من توربينة الرياح',
+    sfx: 'metal',
     inspectText:
-      'سحبتَ الذراع المعدنية الصدئة بقوة حتى استقرت في موضع التشغيل.\n\nتجاوبت التوربينات الهوائية فوق السطح بأزيزٍ كهربائيٍّ خافت، واندفع التيار الاحتياطي عبر الكابلات إلى داخل البيت.',
+      'دفعتَ الذراع المعدنية الثقيلة للأعلى بقوة!\n\nدارت توربينة الرياح فوق السطح بأزيزٍ كهربائي واضح، وعاد التيار الاحتياطي يتدفق نحو غرفة الاتصالات داخل البيت.',
     lines: [
-      { text: 'أخيراً! عادت الطاقة الاحتياطية من توربينة الرياح إلى داخل البيت.', style: 'thought' },
-      { text: 'الشمس اقتربت من العصر... عليّ العودة الآن وتشغيل المذياع القديم.', style: 'thought' },
+      { text: 'نجحت! الكابلات تنبض بالكهرباء الآن... والشمس تقترب سريعاً من العصر.', style: 'thought' },
+      { text: 'عليّ الركض إلى غرفة الاتصالات بالجهة اليمنى داخل البيت وتشغيل المذياع!', style: 'thought' },
     ],
-    timeTarget: 0.88,
-    skipClock: '٤:١٥ عصراً',
-    skipPhase: 'وقت العصر — ظلال طويلة وهواء دافئ',
+    timeTarget: 0.90,
+    whisperClock: '٤:١٨ عصراً',
+    whisperPhase: 'وقت العصر — ظلال طويلة فوق الكثبان',
   },
-  radio: {
-    tag: 'الدليل ٦ — لحظة الحقيقة (العصر)',
-    title: 'المذياع التناظري — التردد ٤٤',
+  {
+    id: 'radio',
+    objective: 'عُد إلى غرفة الاتصالات (الجهة اليمنى داخل البيت) وشغّل المذياع',
+    tag: 'المهمة ٦ من ٦ — لحظة الحقيقة (العصر)',
+    title: 'التردد ٤٤ — النداء من تحت الرمال',
+    sfx: 'radio',
     inspectText:
-      'توهّج مؤشر المذياع بضوء كهرماني دافئ وسط غبار العصر الذهبي، وارتفع صوت التشويش يتخلله نداء متقطع بإشارات مورس...\n\nوفجأةً، دوّى صوت قفلٍ معدني ثقيل ينفتح في أرضية الغرفة خلفك: باب القبو لم يعد مغلقاً.',
+      'توهّج مؤشر المذياع بضوء كهرماني ساطع وسط غبار العصر الذهبي، واخترق صوت مألوف موجات التشويش!\n\nوفي اللحظة نفسها، دوّى صوت انفتاح القفل المغناطيسي لباب القبو الحديدي في الردهة الرئيسية خلفك...',
     lines: [
-      { text: '«... نـادر... إذا كـنتَ تـسمع التـردد ٤٤... لا تـبقَ فـوق الرمـال بـعد الـغـروب...»', style: 'radio' },
-      { text: '«... الإشارة ليست من السماء... إنها من تحت هذا البيت... انزل إلينا...»', style: 'radio' },
-      { text: 'باب القبو الحديدي قد انفتح... لقد حلّ العصر، ولم يبقَ أمامي سوى النزول.', style: 'thought' },
+      { text: '«... نادر! هل تسمعني؟ نحن بخير أسفل القبو... لكن لا تبقَ في الخارج بعد الغروب...»', style: 'radio' },
+      { text: '«... الشيء الذي أيقظناه في الرمال يستفيق كل مساء... انزل إلينا الآن!»', style: 'radio' },
+      { text: 'انفتح باب القبو أخيراً... لقد حلّ العصر، والرحلة الحقيقية تبدأ الآن.', style: 'thought' },
     ],
     timeTarget: 1.0,
-    skipClock: '٤:٤٥ عصراً',
-    skipPhase: 'العصر الذهبي — ختام الفصل الأول',
+    whisperClock: '٤:٤٥ عصراً',
+    whisperPhase: 'العصر الذهبي — ختام الفصل الأول',
   },
-};
+];
 
 export class StoryManager {
   constructor(audio, skyLighting, house, cutscenes, ui) {
@@ -101,19 +118,16 @@ export class StoryManager {
     this.cutscenes = cutscenes;
     this.ui = ui;
 
-    this.discovered = new Set();
-    this.antennaPowered = false;
+    this.missionIndex = 0;
     this.chapterComplete = false;
     this.freeRoam = false;
-    this.gameplayElapsed = 0; // Organic ~5 minute (300s) Noon->Asr progression
 
-    // Typewriter Subtitle Queue
     this.queue = [];
     this.activeLine = null;
     this.charIndex = 0;
     this.charTimer = 0;
     this.holdTimer = 0;
-    this.charInterval = 0.044; // Snappy readable Arabic pace with crisp procedural blips
+    this.charInterval = 0.042;
 
     this.subContainer = document.getElementById('subtitle-container');
     this.subSpeaker = document.getElementById('subtitle-speaker');
@@ -121,29 +135,36 @@ export class StoryManager {
   }
 
   reset() {
-    this.discovered.clear();
-    this.antennaPowered = false;
+    this.missionIndex = 0;
     this.chapterComplete = false;
     this.freeRoam = false;
-    this.gameplayElapsed = 0;
     this.queue = [];
     this.activeLine = null;
     this.house.setAntennaPowered(false);
-    for (const item of this.house.interactables) {
-      item.collected = false;
-    }
-    this.sky.setTimeOfDay(0.0);
+    this.sky.setTimeOfDay(0.0, true);
     this.hideSubtitle();
-    this.ui.updateClues(0, 6);
-    this.ui.updateObjective('تفقّد محيطك والبوصلة القريبة، ثم توجّه إلى البيت المهجور');
-    this.ui.setTimeSkipButtonVisible(false);
+    this._activateCurrentMission();
+  }
+
+  getCurrentMission() {
+    if (this.missionIndex >= MISSIONS.length) return null;
+    return MISSIONS[this.missionIndex];
+  }
+
+  _activateCurrentMission() {
+    const m = this.getCurrentMission();
+    if (!m) {
+      this.house.setActiveMissionId(null);
+      this.ui.updateMission('اكتمل الفصل الأول — تجوّل بحرية في وقت العصر', null);
+      return;
+    }
+    this.house.setActiveMissionId(m.id);
+    this.ui.updateMission(m.objective, null);
   }
 
   enqueueLine(text, style = 'thought', speaker = '') {
     this.queue.push({ text, style, speaker });
-    if (!this.activeLine) {
-      this._startNextLine();
-    }
+    if (!this.activeLine) this._startNextLine();
   }
 
   sayImmediate(text, style = 'thought', speaker = '') {
@@ -188,141 +209,72 @@ export class StoryManager {
   }
 
   handleInteract(interactable) {
-    if (!interactable) return;
-    const id = interactable.id;
+    const m = this.getCurrentMission();
+    // STRICT SEQUENTIAL GATING: only allow interacting with the exact active mission!
+    if (!interactable || !m || interactable.id !== m.id) return;
 
-    // Special check: Radio needs Antenna Power first!
-    if (id === 'radio' && !this.antennaPowered) {
-      this.audio.playMetalSwitch();
-      this.sayImmediate('المذياع ميت تماماً... لا تصله كهرباء. لا بد من توصيل قاطع برج الهوائي على الجدار الشرقي للبيت أولاً.');
-      this.ui.updateObjective('ابحث عن قاطع برج الهوائي على الجدار الشرقي خارج البيت');
-      return;
-    }
+    if (m.sfx === 'metal') this.audio.playMetalSwitch();
+    else if (m.sfx === 'radio') this.audio.playRadioBurst();
+    else this.audio.playPaperRustle();
 
-    const clue = CLUE_DATA[id];
-    if (!clue) return;
-
-    const isFirstTime = !this.discovered.has(id);
-    if (isFirstTime) {
-      this.discovered.add(id);
-      interactable.collected = true;
-      this.ui.updateClues(this.discovered.size, 6);
-    }
-
-    // Play tailored sound effect
-    if (id === 'journal' || id === 'well_photo' || id === 'canteen') {
-      this.audio.playPaperRustle();
-    } else if (id === 'antenna_box') {
-      this.audio.playMetalSwitch();
-      this.antennaPowered = true;
+    if (m.id === 'antenna_box') {
       this.house.setAntennaPowered(true);
-    } else if (id === 'radio') {
-      this.audio.playRadioBurst();
+    } else if (m.id === 'radio') {
       this.house.unlockHatch();
-    } else {
-      this.audio.playPaperRustle();
     }
 
-    // Show rich Arabic inspection modal, then trigger time-skip + dialogue when closed!
-    this.ui.openInspectModal(clue.tag, clue.title, clue.inspectText, () => {
-      if (isFirstTime && clue.skipClock && this.sky.timeOfDay < clue.timeTarget) {
-        this.cutscenes.playTimeSkip(clue.skipClock, clue.skipPhase, clue.timeTarget, () => {
-          this._playCluePostLines(id, clue);
-        });
+    this.ui.openInspectModal(m.tag, m.title, m.inspectText, () => {
+      // Smooth seamless daylight progression without jarring black screens!
+      if (m.whisperClock) {
+        this.cutscenes.smoothAdvanceTime(m.whisperClock, m.whisperPhase, m.timeTarget);
       } else {
-        if (isFirstTime && clue.timeTarget > this.sky.timeOfDay) {
-          this.sky.setTimeOfDay(clue.timeTarget);
-        }
-        this._playCluePostLines(id, clue);
+        this.sky.setTimeOfDay(Math.max(this.sky.targetTimeOfDay, m.timeTarget), false);
       }
-    });
-  }
 
-  _playCluePostLines(id, clue) {
-    for (const line of clue.lines) {
-      this.enqueueLine(line.text, line.style);
-    }
+      for (const line of m.lines) {
+        this.enqueueLine(line.text, line.style);
+      }
 
-    // Show optional manual "تأمل ⏳" time-skip once player has explored at least 2 clues
-    if (this.discovered.size >= 2 && this.sky.timeOfDay < 0.95) {
-      this.ui.setTimeSkipButtonVisible(true);
-    }
+      this.missionIndex++;
+      this._activateCurrentMission();
 
-    // Update contextual Arabic story objective
-    if (id === 'compass') {
-      this.ui.updateObjective('اتبع آثار الأقدام نحو مظلة البيت المهجور');
-    } else if (id === 'canteen') {
-      this.ui.updateObjective('ادخل البيت المهجور وفتّش المكتب الخشبي');
-    } else if (id === 'journal') {
-      this.ui.updateObjective('ابحث عن قاطع برج الهوائي شرق البيت وتفقّد البئر بالخلف');
-    } else if (id === 'well_photo') {
-      this.ui.updateObjective(this.antennaPowered ? 'ارجع للداخل وشغّل المذياع التناظري' : 'شغّل قاطع برج الهوائي على الجدار الشرقي');
-    } else if (id === 'antenna_box') {
-      this.ui.updateObjective('ادخل الغرفة الداخلية وشغّل المذياع التناظري');
-    } else if (id === 'radio' && !this.chapterComplete) {
-      this.chapterComplete = true;
-      this.ui.updateObjective('تم كشف لغز الفصل الأول — وقت العصر');
-      // After the gripping final radio monologue finishes, trigger Chapter 1 Finale!
-      setTimeout(() => {
-        if (!this.freeRoam) {
-          this.cutscenes.startEndingVista();
-          this.ui.showEndingScreen();
-        }
-      }, 10500);
-    }
-  }
-
-  /**
-   * Optional manual "تأمل ⏳" time jump so players can experience Asr lighting anytime!
-   */
-  triggerManualTimeAdvance() {
-    if (this.sky.timeOfDay >= 0.96) {
-      this.sayImmediate('الشمس قد مالت بالفعل إلى وقت العصر الذهبي...');
-      return;
-    }
-    const nextT = Math.min(1.0, this.sky.timeOfDay + 0.34);
-    const { clock, phase } = this.getClockDisplay(nextT);
-    this.cutscenes.playTimeSkip(clock, phase, nextT, () => {
-      if (nextT >= 0.85) {
-        this.sayImmediate('انكسرت حدة الظهيرة وحلّ العصر... ظلال الكثبان تطول بسرعة.');
-      } else {
-        this.sayImmediate('مضى الوقت سريعاً تحت هذه الشمس...');
+      if (m.id === 'radio' && !this.chapterComplete) {
+        this.chapterComplete = true;
+        setTimeout(() => {
+          if (!this.freeRoam) {
+            this.cutscenes.startEndingVista();
+            this.ui.showEndingScreen();
+          }
+        }, 9800);
       }
     });
   }
 
   getClockDisplay(t = this.sky.timeOfDay) {
-    // Maps t in [0, 1] => 12:15 PM (735 min) to 4:45 PM (1005 min)
     const totalMin = Math.round(735 + t * 270);
     const h24 = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
+    const min = totalMin % 60;
     const h12 = h24 > 12 ? h24 - 12 : h24;
-    const mm = m < 10 ? `0${m}` : `${m}`;
+    const mm = min < 10 ? `0${min}` : `${min}`;
     const suffix = h24 >= 15 ? 'عصراً' : 'ظهراً';
-
-    let phase = 'الظهر — شمس عمودية حارقة';
-    if (t >= 0.82) phase = 'العصر — سكون ذهبي وظلال طويلة';
-    else if (t >= 0.56) phase = 'قبيل العصر — حرارة تنكسر';
-    else if (t >= 0.25) phase = 'بعد الظهيرة — وهج الصحراء';
-
-    return {
-      clock: `${toArabicDigits(h12)}:${toArabicDigits(mm)} ${suffix}`,
-      phase,
-    };
+    return `${toArabicDigits(h12)}:${toArabicDigits(mm)} ${suffix}`;
   }
 
-  update(dt, isGameplay) {
-    // Organic ~5-minute (300s) Noon -> Asr daylight progression during active play!
-    if (isGameplay && !this.freeRoam && this.sky.timeOfDay < 0.96) {
-      this.gameplayElapsed += dt;
-      // Gentle real-time sun drift (1.0 full arc in ~300 seconds even without story skips!)
-      const nextT = Math.min(0.96, this.sky.timeOfDay + dt / 300);
-      this.sky.setTimeOfDay(nextT);
+  update(dt, isGameplay, playerPos) {
+    // Organic ~5-minute (300s) Noon -> Asr continuous sun drift
+    if (isGameplay && !this.freeRoam && this.sky.targetTimeOfDay < 0.96) {
+      this.sky.targetTimeOfDay = Math.min(0.96, this.sky.targetTimeOfDay + dt / 320);
     }
 
-    // Update HUD clock smoothly
-    const info = this.getClockDisplay(this.sky.timeOfDay);
-    this.ui.updateClock(info.clock, info.phase, this.sky.timeOfDay);
+    // Update single top mission bar with live distance to active mission!
+    const activeTarget = this.house.getActiveInteractable();
+    const m = this.getCurrentMission();
+    if (isGameplay && m && activeTarget && playerPos) {
+      const distMeters = Math.max(1, Math.round(playerPos.distanceTo(activeTarget.worldPos)));
+      this.ui.updateMission(m.objective, `${toArabicDigits(distMeters)}م`);
+    }
+
+    this.ui.updateClock(this.getClockDisplay(this.sky.timeOfDay), this.sky.timeOfDay);
 
     // Typewriter Subtitle Update + Procedural Character Blips
     if (this.activeLine) {
@@ -333,10 +285,7 @@ export class StoryManager {
           this.charTimer -= this.charInterval;
           const ch = full[this.charIndex];
           this.charIndex++;
-          if (this.subText) {
-            this.subText.textContent = full.slice(0, this.charIndex);
-          }
-          // Play iconic procedural blip every 2 non-space characters for crisp rhythmic speech!
+          if (this.subText) this.subText.textContent = full.slice(0, this.charIndex);
           if (this.charIndex % 2 === 1) {
             this.audio.playTextBlip(this.activeLine.style, ch);
           }
@@ -345,9 +294,7 @@ export class StoryManager {
         if (this.subText) this.subText.classList.remove('typing');
         this.holdTimer += dt;
         const holdDuration = Math.max(2.3, full.length * 0.042);
-        if (this.holdTimer >= holdDuration) {
-          this._startNextLine();
-        }
+        if (this.holdTimer >= holdDuration) this._startNextLine();
       }
     }
   }

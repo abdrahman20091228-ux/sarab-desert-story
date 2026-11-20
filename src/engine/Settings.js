@@ -1,61 +1,67 @@
 /**
- * Graphics, Controls & Audio settings with presets optimized for mobile + desktop 60FPS.
+ * Graphics, Controls & Audio settings tuned for locked 60FPS on both mobile & desktop.
+ * Automatically detects touch/mobile devices to pick a high-FPS default preset!
  */
 
-const STORAGE_KEY = 'sarab_settings_v1';
+const STORAGE_KEY = 'sarab_settings_v2';
+
+export const IS_MOBILE =
+  typeof window !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    ('ontouchstart' in window && Math.min(window.innerWidth, window.innerHeight) < 900));
 
 export const QUALITY_PRESETS = {
   low: {
     label: 'منخفض',
-    dprCap: 0.85,
+    dprCap: 0.78,
     shadowMapSize: 512,
     shadows: false,
-    dustCount: 160,
-    anisotropy: 2,
-    fogFar: 260,
+    dustCount: 70,
+    anisotropy: 1,
     sunFlare: true,
     resolutionScale: 0.75,
+    sandSparkle: false,
   },
   medium: {
     label: 'متوسط',
-    dprCap: 1.15,
-    shadowMapSize: 1024,
+    dprCap: 1.0,
+    shadowMapSize: 512,
     shadows: true,
-    dustCount: 340,
-    anisotropy: 4,
-    fogFar: 340,
+    dustCount: 140,
+    anisotropy: 2,
     sunFlare: true,
-    resolutionScale: 0.9,
+    resolutionScale: 0.85,
+    sandSparkle: false,
   },
   high: {
     label: 'عالي',
-    dprCap: 1.5,
-    shadowMapSize: 2048,
+    dprCap: 1.25,
+    shadowMapSize: 1024,
     shadows: true,
-    dustCount: 560,
-    anisotropy: 8,
-    fogFar: 440,
+    dustCount: 240,
+    anisotropy: 4,
     sunFlare: true,
     resolutionScale: 1.0,
+    sandSparkle: true,
   },
   ultra: {
     label: 'فائق',
-    dprCap: 2.0,
+    dprCap: 1.65,
     shadowMapSize: 2048,
     shadows: true,
-    dustCount: 850,
-    anisotropy: 16,
-    fogFar: 520,
+    dustCount: 380,
+    anisotropy: 8,
     sunFlare: true,
-    resolutionScale: 1.15,
+    resolutionScale: 1.1,
+    sandSparkle: true,
   },
 };
 
 export const DEFAULT_SETTINGS = {
-  quality: 'high',
-  sensitivity: 2.1, // High touch sensitivity by default
-  resolutionScale: 1.0,
-  fov: 70,
+  quality: IS_MOBILE ? 'medium' : 'high',
+  sensitivity: 2.2, // High responsive touch sensitivity by default
+  resolutionScale: IS_MOBILE ? 0.85 : 1.0,
+  fov: 72,
   volume: 0.85,
   shadows: true,
   sunFlare: true,
@@ -77,7 +83,7 @@ export class SettingsManager {
         this.data = { ...DEFAULT_SETTINGS, ...parsed };
       }
     } catch {
-      // Ignore storage errors in sandboxed/private browsers
+      // Ignore storage errors
     }
   }
 
@@ -90,7 +96,7 @@ export class SettingsManager {
   }
 
   getPreset() {
-    return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high;
+    return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.medium;
   }
 
   applyQualityPreset(quality) {

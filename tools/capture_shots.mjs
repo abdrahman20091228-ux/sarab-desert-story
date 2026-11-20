@@ -3,10 +3,10 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const OUT_DIR = '/home/antigravity/.gemini/jetski/brain/v1/default/jetski_remote_agents_3p/89b44aec-088e-45c1-8090-6ae0be2e2ccd/shots';
+const OUT_DIR = '/home/antigravity/.gemini/jetski/brain/v1/default/jetski_remote_agents_3p/89b44aec-088e-45c1-8090-6ae0be2e2ccd/shots_v2';
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const PORT = 5179;
+const PORT = 5181;
 const URL = `http://127.0.0.1:${PORT}/`;
 
 function startServer() {
@@ -17,8 +17,7 @@ function startServer() {
     });
     const timer = setTimeout(() => reject(new Error('Vite startup timeout')), 15000);
     proc.stdout.on('data', (d) => {
-      const s = d.toString();
-      if (s.includes(`:${PORT}`)) {
+      if (d.toString().includes(`:${PORT}`)) {
         clearTimeout(timer);
         resolve(proc);
       }
@@ -27,15 +26,12 @@ function startServer() {
   });
 }
 
-async function waitFrames(page, n = 8) {
+async function waitFrames(page, n = 4) {
   await page.evaluate(
     (count) =>
       new Promise((res) => {
         let i = 0;
-        const step = () => {
-          if (++i >= count) res();
-          else requestAnimationFrame(step);
-        };
+        const step = () => (++i >= count ? res() : requestAnimationFrame(step));
         requestAnimationFrame(step);
       }),
     n
@@ -68,71 +64,55 @@ async function main() {
 
     await page.goto(URL, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => Boolean(window.__SARAB__), { timeout: 15000 });
-    // Let textures finish loading & render several frames
-    await page.waitForTimeout(1400);
-    await waitFrames(page, 12);
+    await page.waitForTimeout(1000);
+    await waitFrames(page, 5);
 
-    // 1. Title Screen
-    await page.screenshot({ path: path.join(OUT_DIR, '01_title_screen.png') });
-    const titleStats = await page.evaluate(() => window.__SARAB__.getStats());
-    console.log('Shot 1 (Title):', JSON.stringify(titleStats));
+    // 1. Title Screen with new Reem Kufi + Changa font & enlarged grand house
+    await page.evaluate(() => window.__SARAB__.showTitle());
+    await page.waitForTimeout(500);
+    await waitFrames(page, 4);
+    await page.screenshot({ path: path.join(OUT_DIR, '01_v2_title.png') });
+    console.log('Shot 1 (Title):', JSON.stringify(await page.evaluate(() => window.__SARAB__.getStats())));
 
-    // 2. Wake-up eyelids half-opening
-    await page.evaluate(() => {
-      window.__SARAB__.setWakeupAt(1.95);
-      window.__SARAB__.triggerSubtitle('حرارة... رمل جاف يملأ فمي... أين أنا؟');
-    });
-    await page.waitForTimeout(800);
-    await waitFrames(page, 6);
-    await page.screenshot({ path: path.join(OUT_DIR, '02_wakeup_eyelids.png') });
-    console.log('Shot 2 (Wakeup Eyelids) saved');
-
-    // 3. Looking straight up at blazing Noon sun with glare!
-    await page.evaluate(() => {
-      window.__SARAB__.setWakeupAt(4.95);
-      window.__SARAB__.triggerSubtitle('آه... الشمس حارقة! سطوعها يكاد يعمي عيني...');
-    });
-    await page.waitForTimeout(800);
-    await waitFrames(page, 6);
-    await page.screenshot({ path: path.join(OUT_DIR, '03_wakeup_sun_glare.png') });
-    console.log('Shot 3 (Sun Glare) saved');
-
-    // 4. Noon Gameplay — looking across desert sand & footprints toward abandoned house
+    // 2. Noon Gameplay — clean HUD, single mission bar, buried 4x4 Jeep, compass rock, grand estate & palms!
     await page.evaluate(() => {
       window.__SARAB__.setTimeOfDay(0.0);
-      window.__SARAB__.teleport(-8.5, 8.8, -0.36, -0.02);
-      window.__SARAB__.triggerSubtitle('صحراء شاسعة... وذلك البيت المهجور أمامي. لا بد أن أجد ماءً أو إجابة.');
+      window.__SARAB__.teleport(-11.0, 14.5, -0.32, -0.02);
+      window.__SARAB__.setMission(0);
+      window.__SARAB__.triggerSubtitle('بيت مهجور وسط هذه الكثبان... وهناك بوصلة تلمع على الصخرة أمامي.');
     });
-    await page.waitForTimeout(1000);
-    await waitFrames(page, 6);
-    await page.screenshot({ path: path.join(OUT_DIR, '04_noon_gameplay.png') });
-    const noonStats = await page.evaluate(() => window.__SARAB__.getStats());
-    console.log('Shot 4 (Noon Gameplay):', JSON.stringify(noonStats));
+    await page.waitForTimeout(900);
+    await waitFrames(page, 4);
+    await page.screenshot({ path: path.join(OUT_DIR, '02_v2_noon_living_desert.png') });
+    console.log('Shot 2 (Noon Living Desert):', JSON.stringify(await page.evaluate(() => window.__SARAB__.getStats())));
 
-    // 5. House Interior — verify clean stone floor, warm ceiling, desk, journal, hatch!
+    // 3. Enlarged 3-Room House Interior (Main Hall + Study view + Hatch)
     await page.evaluate(() => {
-      window.__SARAB__.setTimeOfDay(0.55);
-      window.__SARAB__.powerAntenna();
-      window.__SARAB__.teleport(0.3, -10.0, 0.72, -0.06);
-      window.__SARAB__.triggerSubtitle('اسمي نادر... وهذا خطّي! لقد كنتُ جزءاً من هذه البعثة...', 'journal');
+      window.__SARAB__.setTimeOfDay(0.5);
+      window.__SARAB__.teleport(0.5, -14.2, 0.56, -0.04);
+      window.__SARAB__.setMission(3);
+      window.__SARAB__.triggerSubtitle('زملائي محاصرون في القبو تحت قدميّ الآن... منذ الأمس!', 'journal');
     });
-    await page.waitForTimeout(1000);
-    await waitFrames(page, 6);
-    await page.screenshot({ path: path.join(OUT_DIR, '05_house_interior.png') });
-    const indoorStats = await page.evaluate(() => window.__SARAB__.getStats());
-    console.log('Shot 5 (House Interior):', JSON.stringify(indoorStats));
+    await page.waitForTimeout(900);
+    await waitFrames(page, 4);
+    await page.screenshot({ path: path.join(OUT_DIR, '03_v2_grand_interior.png') });
+    console.log('Shot 3 (Grand Interior):', JSON.stringify(await page.evaluate(() => window.__SARAB__.getStats())));
 
-    // 6. Asr Golden Hour Vista — warm golden amber sun, long shadows, wind-vane silhouette!
+    // 4. Asr Golden Hour — Buried Jeep + Enlarged Estate + Swaying Palms + Mesas!
     await page.evaluate(() => {
       window.__SARAB__.setTimeOfDay(0.95);
-      window.__SARAB__.teleport(-11.8, 3.2, -0.56, 0.04);
+      window.__SARAB__.teleport(-15.5, 6.2, -0.52, 0.03);
+      window.__SARAB__.setMission(4);
       window.__SARAB__.triggerSubtitle('انكسرت حدة الظهيرة وحلّ العصر... ظلال الكثبان تطول بسرعة.');
     });
-    await page.waitForTimeout(1000);
-    await waitFrames(page, 6);
-    await page.screenshot({ path: path.join(OUT_DIR, '06_asr_golden_hour.png') });
-    const asrStats = await page.evaluate(() => window.__SARAB__.getStats());
-    console.log('Shot 6 (Asr Golden Hour):', JSON.stringify(asrStats));
+    await page.waitForTimeout(900);
+    await waitFrames(page, 4);
+    await page.screenshot({ path: path.join(OUT_DIR, '04_v2_asr_living_world.png') });
+    console.log('Shot 4 (Asr Living World):', JSON.stringify(await page.evaluate(() => window.__SARAB__.getStats())));
+
+    // Physics verification: 360-degree rock collision test!
+    const rockTest = await page.evaluate(() => window.__SARAB__.testRockCollision());
+    console.log('Rock 360° Collision Test:', JSON.stringify(rockTest));
 
     await browser.close();
   } finally {
@@ -140,7 +120,7 @@ async function main() {
   }
 
   if (errors.length > 0) {
-    console.error('CONSOLE ERRORS DETECTED:', errors);
+    console.error('CONSOLE ERRORS:', errors);
     process.exit(1);
   } else {
     console.log('ZERO console errors!');
