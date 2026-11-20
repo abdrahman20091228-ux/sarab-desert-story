@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="screen-orientation" content="landscape" />
+  <meta name="theme-color" content="#1a120b" />
+  <meta name="description" content="سراب: ظهيرة الرمال — لعبة قصصية ثلاثية الأبعاد بمنظور الشخص الأول في صحراء شاسعة، الفصل الأول من الظهر إلى العصر." />
+  <title>سَـرَاب | ظهيرة الرمال</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d98236'/%3E%3C/svg%3E" />
+  <script type="module" crossorigin src="./assets/index-Cq0YGVqR.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-D_uP_T7C.css">
+</head>
+<body>
+  <!-- 3D WebGL Canvas Container -->
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Optical Post-FX Overlays (Sun Glare, Heat Haze, Vignette, Eyelids, Time Fade) -->
+    <div id="sun-glare-layer" aria-hidden="true">
+      <div class="sun-core-bloom"></div>
+      <div class="sun-flare-ring ring-1"></div>
+      <div class="sun-flare-ring ring-2"></div>
+      <div class="sun-flare-streak"></div>
+    </div>
+    <div id="heat-haze-layer" aria-hidden="true"></div>
+    <div id="vignette-layer" aria-hidden="true"></div>
+
+    <!-- Wake-Up Cinematic Eyelids + Blur Layer -->
+    <div id="eyelid-layer" aria-hidden="true">
+      <div class="eyelid eyelid-top"></div>
+      <div class="eyelid eyelid-bottom"></div>
+    </div>
+    <div id="vision-blur-layer" aria-hidden="true"></div>
+
+    <!-- Cinematic Letterbox Bars -->
+    <div id="letterbox-top" class="letterbox-bar" aria-hidden="true"></div>
+    <div id="letterbox-bottom" class="letterbox-bar" aria-hidden="true"></div>
+
+    <!-- Time-Skip / Scene Transition Curtain -->
+    <div id="transition-curtain" aria-hidden="true">
+      <div class="transition-time-display">
+        <span id="transition-clock">١٢:١٥</span>
+        <span id="transition-label">الظهيرة</span>
+      </div>
+    </div>
+
+    <!-- ==================== CINEMATIC TITLE SCREEN ==================== -->
+    <section id="title-screen" class="screen-overlay active" aria-label="شاشة البداية">
+      <div class="title-scrim"></div>
+      <div class="title-layout">
+        <header class="title-brand">
+          <p class="title-chapter-tag">الفصل الأول • من الظهر إلى العصر</p>
+          <h1 class="title-main">سَـرَاب</h1>
+          <p class="title-subtitle">ظهيرة الرمال المنسية</p>
+          <div class="title-divider"></div>
+          <p class="title-logline">
+            تستيقظ وحيداً تحت شمسٍ لا ترحم، بجوار بيتٍ مهجورٍ تبتلعه الكثبان...
+            كل أثرٍ هنا يعرف اسمك، إلا أنت.
+          </p>
+        </header>
+
+        <nav class="title-actions" aria-label="القائمة الرئيسية">
+          <button id="btn-start-game" class="btn-primary-cinematic">
+            <span class="btn-label">ابدأ القصة</span>
+            <span class="btn-sub">الفصل الأول — استكشاف صحراوي</span>
+          </button>
+          <div class="title-secondary-row">
+            <button id="btn-open-settings" class="btn-ghost-cinematic">الإعدادات والجرافيك</button>
+            <button id="btn-open-controls" class="btn-ghost-cinematic">التحكم</button>
+          </div>
+          <div class="title-footer-meta">
+            <span>منظور شخص أول 3D</span>
+            <span class="meta-dot">•</span>
+            <span>تحكم لمس عالي الحساسية + لوحة مفاتيح</span>
+          </div>
+        </nav>
+      </div>
+    </section>
+
+    <!-- ==================== IN-GAME HUD ==================== -->
+    <div id="hud-layer" class="hidden">
+      <!-- Top Bar -->
+      <div class="hud-top-bar">
+        <div class="hud-top-right">
+          <div class="hud-time-badge">
+            <span class="time-sun-icon" id="hud-sun-icon">☀</span>
+            <div class="time-text-group">
+              <span id="hud-clock">١٢:١٥ ظهراً</span>
+              <span id="hud-phase-label">الظهر — حرارة شديدة</span>
+            </div>
+          </div>
+          <div class="hud-objective-pill" id="hud-objective">
+            <span class="objective-marker">◆</span>
+            <span id="hud-objective-text">تفقّد محيطك والبيت المهجور</span>
+          </div>
+        </div>
+
+        <div class="hud-top-left">
+          <div id="hud-fps-counter" class="hud-chip hidden">60 FPS</div>
+          <div class="hud-chip" id="hud-clues-chip">الأدلة: <strong id="hud-clues-count">٠ / ٦</strong></div>
+          <button id="btn-hud-pause" class="hud-icon-btn" aria-label="الإعدادات والإيقاف المؤقت" title="الإعدادات">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Center Reticle & Contextual Interaction Prompt -->
+      <div id="reticle-container">
+        <div id="reticle-dot"></div>
+        <button id="interact-prompt" class="hidden" type="button">
+          <span class="interact-key">لمس / E</span>
+          <span id="interact-label">فحص</span>
+        </button>
+      </div>
+
+      <!-- Skip Cutscene Button -->
+      <button id="btn-skip-cutscene" class="hidden" type="button">تخطي المشهد ⏭</button>
+
+      <!-- Mobile Touch Controls (Landscape Layout) -->
+      <div id="touch-controls-layer">
+        <!-- Left Touch Joystick Zone -->
+        <div id="joystick-zone" aria-label="عصا الحركة">
+          <div id="joystick-base">
+            <div id="joystick-ring"></div>
+            <div id="joystick-knob"></div>
+          </div>
+        </div>
+
+        <!-- Right Touch Look Zone -->
+        <div id="look-zone" aria-label="منطقة النظر والكاميرا"></div>
+
+        <!-- Right Side Mobile Action Buttons -->
+        <div id="mobile-action-buttons">
+          <button id="btn-mobile-interact" class="mobile-action-btn primary hidden" type="button" aria-label="تفاعل">
+            <span class="action-icon">◈</span>
+            <span class="action-text" id="mobile-interact-text">فحص</span>
+          </button>
+          <div class="mobile-secondary-actions">
+            <button id="btn-mobile-sprint" class="mobile-action-btn small" type="button" aria-label="ركض">
+              <span>ركض</span>
+            </button>
+            <button id="btn-mobile-skip-time" class="mobile-action-btn small hidden" type="button" aria-label="تأمل وتقديم الوقت">
+              <span>تأمل ⏳</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SUBTITLE / MONOLOGUE BAR ==================== -->
+    <div id="subtitle-container" class="hidden" aria-live="polite">
+      <div class="subtitle-box">
+        <div id="subtitle-speaker" class="subtitle-speaker hidden"></div>
+        <p id="subtitle-text" class="subtitle-text"></p>
+      </div>
+    </div>
+
+    <!-- ==================== CLUE INSPECTION MODAL ==================== -->
+    <div id="inspect-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="inspect-card">
+        <div class="inspect-header">
+          <span id="inspect-tag" class="inspect-tag">أثر مكتشف</span>
+          <h2 id="inspect-title">عنوان الدليل</h2>
+        </div>
+        <div id="inspect-body" class="inspect-body"></div>
+        <div class="inspect-footer">
+          <button id="btn-close-inspect" class="btn-primary-cinematic compact" type="button">متابعة</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SETTINGS MODAL ==================== -->
+    <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="الإعدادات">
+      <div class="settings-panel">
+        <header class="settings-header">
+          <h2>الإعدادات والجرافيك</h2>
+          <button id="btn-close-settings" class="close-btn" type="button" aria-label="إغلاق">✕</button>
+        </header>
+
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div class="setting-info">
+              <label for="opt-quality">مستوى الجرافيك</label>
+              <span>يوازن بين جودة الرمال والظلال وثبات الإطارات</span>
+            </div>
+            <div class="segmented-control" id="opt-quality">
+              <button type="button" data-val="low">منخفض</button>
+              <button type="button" data-val="medium">متوسط</button>
+              <button type="button" data-val="high" class="active">عالي</button>
+              <button type="button" data-val="ultra">فائق</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label for="opt-sensitivity">حساسية اللمس والكاميرا</label>
+              <span>افتراضياً مرتفعة لاستجابة فورية على الهواتف</span>
+            </div>
+            <div class="slider-wrap">
+              <input id="opt-sensitivity" type="range" min="0.6" max="4.0" step="0.1" value="2.1" />
+              <span id="val-sensitivity">2.1x</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label for="opt-resolution">دقة العرض (Scale)</label>
+              <span>خفض الدقة يرفع الفريمات فوراً على الأجهزة الضعيفة</span>
+            </div>
+            <div class="slider-wrap">
+              <input id="opt-resolution" type="range" min="0.55" max="1.5" step="0.05" value="1.0" />
+              <span id="val-resolution">100%</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label for="opt-fov">مجال الرؤية (FOV)</label>
+              <span>زاوية الرؤية في المنظور الأول</span>
+            </div>
+            <div class="slider-wrap">
+              <input id="opt-fov" type="range" min="58" max="88" step="1" value="70" />
+              <span id="val-fov">70°</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label for="opt-volume">مستوى الصوت والمؤثرات</label>
+              <span>الرياح، الخطوات، ونقرات الحوار البرمجية</span>
+            </div>
+            <div class="slider-wrap">
+              <input id="opt-volume" type="range" min="0" max="1" step="0.05" value="0.85" />
+              <span id="val-volume">85%</span>
+            </div>
+          </div>
+
+          <div class="setting-row toggles-row">
+            <label class="toggle-item">
+              <input id="opt-shadows" type="checkbox" checked />
+              <span>الظلال الديناميكية</span>
+            </label>
+            <label class="toggle-item">
+              <input id="opt-sunflare" type="checkbox" checked />
+              <span>سطوع الشمس والعدسة</span>
+            </label>
+            <label class="toggle-item">
+              <input id="opt-fps" type="checkbox" checked />
+              <span>إظهار عداد الفريمات FPS</span>
+            </label>
+          </div>
+        </div>
+
+        <footer class="settings-footer">
+          <button id="btn-resume-from-settings" class="btn-primary-cinematic compact" type="button">حفظ ومتابعة</button>
+          <button id="btn-return-title" class="btn-ghost-cinematic compact hidden" type="button">العودة للشاشة الرئيسية</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ==================== CONTROLS GUIDE MODAL ==================== -->
+    <div id="controls-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="عناصر التحكم">
+      <div class="settings-panel compact-panel">
+        <header class="settings-header">
+          <h2>عناصر التحكم</h2>
+          <button id="btn-close-controls" class="close-btn" type="button" aria-label="إغلاق">✕</button>
+        </header>
+        <div class="controls-list">
+          <div class="control-item">
+            <strong>الهواتف (الوضع الأفقي)</strong>
+            <p>الجهة اليسرى: عصا المشي والحركة • الجهة اليمنى: السحب السريع لتحريك الكاميرا بحساسية عالية • زر (فحص) يظهر عند الاقتراب من الأدلة.</p>
+          </div>
+          <div class="control-item">
+            <strong>الحاسوب (لوحة المفاتيح والفأرة)</strong>
+            <p>WASD أو الأسهم للحركة • الفأرة للنظر (انقر على الشاشة لقفل المؤشر أو اسحب) • E للتفاعل والفحص • Shift للركض • Esc للإعدادات.</p>
+          </div>
+        </div>
+        <footer class="settings-footer">
+          <button id="btn-ok-controls" class="btn-primary-cinematic compact" type="button">حسناً</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ==================== CHAPTER 1 FINALE SCREEN ==================== -->
+    <section id="ending-screen" class="screen-overlay hidden" aria-label="نهاية الفصل الأول">
+      <div class="ending-card">
+        <p class="title-chapter-tag">نهاية الفصل الأول</p>
+        <h2 class="ending-title">لقد حلّ العصر...</h2>
+        <p class="ending-text">
+          كشفت الرمال أول خيوط الحقيقة: أنت لست تائهاً بالصدفة.
+          الإشارة الغامضة تنبعث من القبو المغلق أسفل هذا البيت المهجور،
+          والشمس تميل نحو الغروب فوق صحراء لا تمنح الغرباء فرصة ثانية.
+        </p>
+        <p class="ending-next">يتبع في الفصل الثاني: «ما تحت الرمال»</p>
+        <div class="ending-actions">
+          <button id="btn-free-roam" class="btn-primary-cinematic compact" type="button">التجول الحر في وقت العصر</button>
+          <button id="btn-replay-chapter" class="btn-ghost-cinematic compact" type="button">إعادة الفصل الأول</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== PORTRAIT ORIENTATION HINT ==================== -->
+    <div id="portrait-warning" class="hidden" aria-live="polite">
+      <div class="portrait-card">
+        <div class="rotate-icon">📱↻</div>
+        <h3>اللعبة مصممة للوضع الأفقي</h3>
+        <p>قم بتدوير هاتفك أفقياً للحصول على التجربة السينمائية الكاملة وأفضل تحكم باللمس.</p>
+        <button id="btn-dismiss-portrait" class="btn-ghost-cinematic compact" type="button">المتابعة على أي حال</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
