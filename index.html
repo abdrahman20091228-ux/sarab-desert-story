@@ -10,8 +10,8 @@
   <meta name="description" content="سراب: ظهيرة الرمال — لعبة قصصية ثلاثية الأبعاد بمنظور الشخص الأول في صحراء شاسعة حية، الفصل الأول من الظهر إلى العصر." />
   <title>سَـرَاب | ظهيرة الرمال</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d98236'/%3E%3C/svg%3E" />
-  <script type="module" crossorigin src="./assets/index-7wk36P6K.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DiVFAB8k.css">
+  <script type="module" crossorigin src="./assets/index-DiuY6g1u.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-TYWjyRfL.css">
 </head>
 <body>
   <div id="game-container">
@@ -88,10 +88,10 @@
 
     <!-- ==================== ULTRA-CLEAN ZERO-DISTRACTION HUD ==================== -->
     <div id="hud-layer" class="hidden">
-      <!-- Single Sleek Top-Center Current Mission Banner (Only ONE mission visible!) -->
+      <!-- Single Sleek Top-Center Current Mission Banner + Directional Compass Arrow -->
       <div id="mission-bar">
         <div class="mission-main">
-          <span class="mission-diamond">◈</span>
+          <span id="hud-mission-arrow" class="mission-arrow" aria-hidden="true">▲</span>
           <span id="hud-mission-text">تفحّص البوصلة الملقاة على الصخرة القريبة</span>
           <span id="hud-mission-dist" class="mission-dist"></span>
         </div>
@@ -100,6 +100,12 @@
           <span id="hud-clock">١٢:١٥ ظهراً</span>
         </div>
       </div>
+
+      <!-- Persistent PUBG Auto-Sprint Lock Indicator (tap to cancel!) -->
+      <button id="auto-sprint-banner" class="auto-sprint-banner hidden" type="button">
+        <span>⚡ الركض التلقائي مُقفَل</span>
+        <span class="auto-sprint-cancel">إلغاء ✕</span>
+      </button>
 
       <!-- Minimal Top-Left Controls (FPS + Restore Fullscreen + Settings) -->
       <div class="hud-corner-left">
@@ -111,7 +117,7 @@
           </svg>
         </button>
         <button id="btn-restore-fs" class="minimal-circle-btn hidden" type="button" aria-label="ملء الشاشة" title="ملء الشاشة">⛶</button>
-        <span id="hud-fps-counter" class="fps-pill">60 FPS</span>
+        <span id="hud-fps-counter" class="fps-pill hidden">60 FPS</span>
       </div>
 
       <!-- Clean Subtle Center Reticle Dot -->
@@ -254,7 +260,7 @@
               <span>سطوع الشمس</span>
             </label>
             <label class="toggle-item">
-              <input id="opt-fps" type="checkbox" checked />
+              <input id="opt-fps" type="checkbox" />
               <span>عداد FPS</span>
             </label>
           </div>
@@ -276,12 +282,12 @@
         </header>
         <div class="controls-list">
           <div class="control-item">
-            <strong>الهواتف (ملء الشاشة الأفقي)</strong>
-            <p>اليسار: عصا الحركة • اليمين: سحب سريع للكاميرا بحساسية عالية • زر (ركض) للركض السريع بحلقة التحمل • زر (فحص) يظهر تلقائياً عند الاقتراب من المهمة الحالية.</p>
+            <strong>الهواتف (تحكم بأسلوب PUBG)</strong>
+            <p>اليسار: عصا حركة عائمة تظهر تحت إبهامك (المشي داخل الحلقة، واسحب للأمام خارج الحلقة للركض أو ارفعها للأيقونة لقفل الركض التلقائي) • اليمين: دوران سريع للكاميرا + زر (قفز) لتسلق الصخور والسيارة + زر (فحص) يظهر تلقائياً عند الاقتراب.</p>
           </div>
           <div class="control-item">
             <strong>الحاسوب</strong>
-            <p>WASD للحركة • Shift للركض الحقيقي • الفأرة للنظر • E للتفاعل مع المهمة • Esc للإعدادات.</p>
+            <p>WASD للحركة • Shift للركض • Space للقفز والتسلق • الفأرة للنظر • E للتفاعل مع المهمة • Esc للإعدادات.</p>
           </div>
         </div>
         <footer class="settings-footer">
