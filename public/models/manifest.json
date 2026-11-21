@@ -1,0 +1,182 @@
+{
+  "rock_07": {
+    "name": "rock_07",
+    "source": "Poly Haven CC0 (rock_07)",
+    "verts": 942,
+    "tris": 1730,
+    "bmin": [
+      -0.262,
+      0.003,
+      -0.484
+    ],
+    "bmax": [
+      0.264,
+      0.449,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "rock_09": {
+    "name": "rock_09",
+    "source": "Poly Haven CC0 (rock_09)",
+    "verts": 930,
+    "tris": 1742,
+    "bmin": [
+      -0.255,
+      0.001,
+      -0.5
+    ],
+    "bmax": [
+      0.256,
+      0.227,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "compass": {
+    "name": "compass",
+    "source": "Poly Haven CC0 (seadogs_compass)",
+    "verts": 1573,
+    "tris": 1910,
+    "bmin": [
+      -0.324,
+      0.009,
+      -0.5
+    ],
+    "bmax": [
+      0.325,
+      0.18,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "crate": {
+    "name": "crate",
+    "source": "Poly Haven CC0 (wooden_crate_01)",
+    "verts": 668,
+    "tris": 737,
+    "bmin": [
+      -0.495,
+      0.0,
+      -0.248
+    ],
+    "bmax": [
+      0.5,
+      0.424,
+      0.248
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "table": {
+    "name": "table",
+    "source": "Poly Haven CC0 (painted_wooden_table)",
+    "verts": 387,
+    "tris": 313,
+    "bmin": [
+      -0.5,
+      0.0,
+      -0.236
+    ],
+    "bmax": [
+      0.5,
+      0.399,
+      0.236
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "chair": {
+    "name": "chair",
+    "source": "Poly Haven CC0 (painted_wooden_chair_01)",
+    "verts": 499,
+    "tris": 491,
+    "bmin": [
+      -0.4,
+      0.0,
+      -0.5
+    ],
+    "bmax": [
+      0.4,
+      1.772,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "barrel": {
+    "name": "barrel",
+    "source": "Poly Haven CC0 (barrel_03)",
+    "verts": 489,
+    "tris": 509,
+    "bmin": [
+      -0.475,
+      0.0,
+      -0.479
+    ],
+    "bmax": [
+      0.496,
+      1.457,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "lantern": {
+    "name": "lantern",
+    "source": "Poly Haven CC0 (vintage_oil_lamp)",
+    "verts": 913,
+    "tris": 1289,
+    "bmin": [
+      -0.5,
+      0.0,
+      -0.462
+    ],
+    "bmax": [
+      0.5,
+      3.644,
+      0.5
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "jug": {
+    "name": "jug",
+    "source": "Poly Haven CC0 (jug_01)",
+    "verts": 1321,
+    "tris": 2281,
+    "bmin": [
+      -0.5,
+      0.0,
+      -0.304
+    ],
+    "bmax": [
+      0.5,
+      0.768,
+      0.304
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  },
+  "tyre": {
+    "name": "tyre",
+    "source": "Poly Haven CC0 (old_tyre)",
+    "verts": 1239,
+    "tris": 1703,
+    "bmin": [
+      -0.5,
+      0.0,
+      -0.137
+    ],
+    "bmax": [
+      0.5,
+      1.0,
+      0.137
+    ],
+    "hasDiff": true,
+    "hasNor": true
+  }
+}

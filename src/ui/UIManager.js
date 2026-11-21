@@ -18,6 +18,7 @@ export class UIManager {
 
     this.missionTextEl = document.getElementById('hud-mission-text');
     this.missionDistEl = document.getElementById('hud-mission-dist');
+    this.missionArrowEl = document.getElementById('hud-mission-arrow');
     this.clockEl = document.getElementById('hud-clock');
     this.sunIconEl = document.getElementById('hud-sun-icon');
     this.fpsEl = document.getElementById('hud-fps-counter');
@@ -296,9 +297,17 @@ export class UIManager {
     requestAnimationFrame(() => this.endingScreen?.classList.add('active'));
   }
 
-  updateMission(text, distText) {
+  updateMission(text, distText, arrowDeg = null) {
     if (this.missionTextEl && this.missionTextEl.textContent !== text) {
       this.missionTextEl.textContent = text;
+    }
+    if (this.missionArrowEl) {
+      if (arrowDeg !== null && Number.isFinite(arrowDeg)) {
+        this.missionArrowEl.style.transform = `rotate(${arrowDeg.toFixed(1)}deg)`;
+        this.missionArrowEl.classList.remove('hidden');
+      } else {
+        this.missionArrowEl.classList.add('hidden');
+      }
     }
     if (this.missionDistEl) {
       if (distText) {

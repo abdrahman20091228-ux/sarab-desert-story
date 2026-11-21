@@ -3,7 +3,7 @@
  * Automatically detects touch/mobile devices to pick a high-FPS default preset!
  */
 
-const STORAGE_KEY = 'sarab_settings_v2';
+const STORAGE_KEY = 'sarab_settings_v3';
 
 export const IS_MOBILE =
   typeof window !== 'undefined' &&
@@ -16,26 +16,26 @@ export const QUALITY_PRESETS = {
     dprCap: 0.78,
     shadowMapSize: 512,
     shadows: false,
-    dustCount: 70,
+    dustCount: 80,
     anisotropy: 1,
     sunFlare: true,
-    resolutionScale: 0.75,
+    resolutionScale: 0.78,
     sandSparkle: false,
   },
   medium: {
     label: 'متوسط',
-    dprCap: 1.0,
+    dprCap: 1.05,
     shadowMapSize: 512,
     shadows: true,
-    dustCount: 140,
+    dustCount: 150,
     anisotropy: 2,
     sunFlare: true,
-    resolutionScale: 0.85,
+    resolutionScale: 0.9,
     sandSparkle: false,
   },
   high: {
     label: 'عالي',
-    dprCap: 1.25,
+    dprCap: 1.35,
     shadowMapSize: 1024,
     shadows: true,
     dustCount: 240,
@@ -46,10 +46,10 @@ export const QUALITY_PRESETS = {
   },
   ultra: {
     label: 'فائق',
-    dprCap: 1.65,
+    dprCap: 1.7,
     shadowMapSize: 2048,
     shadows: true,
-    dustCount: 380,
+    dustCount: 320,
     anisotropy: 8,
     sunFlare: true,
     resolutionScale: 1.1,
@@ -59,13 +59,13 @@ export const QUALITY_PRESETS = {
 
 export const DEFAULT_SETTINGS = {
   quality: IS_MOBILE ? 'medium' : 'high',
-  sensitivity: 2.2, // High responsive touch sensitivity by default
-  resolutionScale: IS_MOBILE ? 0.85 : 1.0,
+  sensitivity: 2.2,
+  resolutionScale: IS_MOBILE ? 0.9 : 1.0,
   fov: 72,
   volume: 0.85,
   shadows: true,
   sunFlare: true,
-  showFps: true,
+  showFps: false,
 };
 
 export class SettingsManager {

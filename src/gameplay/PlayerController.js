@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 
 /**
- * First-Person Player Controller featuring:
- * - True PUBG-Style Floating Dynamic Joystick (spawns wherever thumb touches left zone!)
- * - Integrated PUBG Sprint + Auto-Sprint Lock (push stick up >80% to sprint; push into top lock pill to lock sprint!)
- * - Real Jump Physics (Gravity + Jump Button + Spacebar) with climbing/standing on rocks, jeep, crates & hills!
- * - High-sensitivity landscape mobile touch look + Desktop WASD/Mouse
+ * First-Person Player Controller (v3.0):
+ * - True PUBG-Style Floating Dynamic Joystick:
+ *   * Inside the base ring (0..46px) = 100% smooth walking (never accidentally triggers sprint!)
+ *   * Pushing thumb OUTSIDE the ring (>50px upward) = Sprint!
+ *   * Dragging thumb into the top lock pill (>94px upward) and releasing = Auto-Sprint Lock with persistent HUD pill (#auto-sprint-banner)!
+ * - Real Jump Physics (Gravity + Jump Button + Spacebar) with downhill ground-snapping so sprinting down sand dunes never stutters!
+ * - High-sensitivity landscape mobile touch look + Desktop WASD/Mouse + subtle tactile haptics
  */
 export class PlayerController {
   constructor(camera, physics, audio, settings) {
@@ -21,12 +23,13 @@ export class PlayerController {
     this.eyeHeight = 1.72;
 
     // Movement + Real Sprint + Jump Physics
-    this.walkSpeed = 4.35;
-    this.sprintSpeed = 8.9;
+    this.walkSpeed = 4.55;
+    this.sprintSpeed = 8.95;
     this.vy = 0;
     this.gravity = -19.5;
-    this.jumpVelocity = 7.4; // Crisp athletic jump (~1.4m peak height, lets you hop onto rocks & jeep!)
+    this.jumpVelocity = 7.5;
     this.onGround = true;
+    this.isJumping = false;
 
     this.isActuallySprinting = false;
     this.currentFovBoost = 0;
@@ -42,7 +45,8 @@ export class PlayerController {
 
     this.keys = {};
     this.joyVec = { x: 0, y: 0 };
-    this.joyRawUp = 0;
+    this.joyBeyondRing = false;
+    this.joyLockHover = false;
     this.joyActive = false;
     this.joyTouchId = null;
     this.joyOrigin = { x: 0, y: 0 };
@@ -61,7 +65,21 @@ export class PlayerController {
     this._moveDir = new THREE.Vector3();
     this._toObj = new THREE.Vector3();
 
+    this.sprintBannerEl = document.getElementById('auto-sprint-banner');
     this._bindInputs();
+  }
+
+  _haptic(ms = 12) {
+    try {
+      if (navigator.vibrate) navigator.vibrate(ms);
+    } catch {}
+  }
+
+  setAutoSprintLock(locked) {
+    this.autoSprintLocked = Boolean(locked);
+    if (this.sprintBannerEl) {
+      this.sprintBannerEl.classList.toggle('hidden', !this.autoSprintLocked);
+    }
   }
 
   setPose(x, z, yaw, pitch = 0) {
@@ -69,6 +87,8 @@ export class PlayerController {
     this.position.set(x, g.groundY, z);
     this.vy = 0;
     this.onGround = true;
+    this.isJumping = false;
+    this.setAutoSprintLock(false);
     this.yaw = yaw;
     this.pitch = pitch;
     this._targetYaw = yaw;
@@ -79,8 +99,10 @@ export class PlayerController {
   triggerJump() {
     if (!this.enabled || !this.onGround) return;
     this.audio.unlock();
+    this._haptic(14);
     this.vy = this.jumpVelocity;
     this.onGround = false;
+    this.isJumping = true;
     this.audio.playFootstep(this.currentSurface, true);
   }
 
@@ -88,6 +110,7 @@ export class PlayerController {
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.isSprintingKey = true;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') this.setAutoSprintLock(false);
       if (e.code === 'Space') {
         e.preventDefault();
         this.triggerJump();
@@ -98,7 +121,17 @@ export class PlayerController {
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.isSprintingKey = false;
     });
 
-    // Jump Button (touchstart for zero-latency mobile response + click for desktop)
+    if (this.sprintBannerEl) {
+      const cancelLock = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.setAutoSprintLock(false);
+        this._haptic(10);
+      };
+      this.sprintBannerEl.addEventListener('touchstart', cancelLock, { passive: false });
+      this.sprintBannerEl.addEventListener('click', cancelLock);
+    }
+
     const jumpBtn = document.getElementById('btn-mobile-jump');
     if (jumpBtn) {
       jumpBtn.addEventListener('touchstart', (e) => {
@@ -194,13 +227,14 @@ export class PlayerController {
       lookZone.addEventListener('touchcancel', endLook, { passive: true });
     }
 
-    // ==================== PUBG FLOATING DYNAMIC JOYSTICK + INTEGRATED SPRINT ====================
+    // ==================== TRUE PUBG FLOATING JOYSTICK + OUTER-RING SPRINT & SPRINT-LOCK ====================
     const joyZone = document.getElementById('joystick-zone');
     const floatWrap = document.getElementById('joystick-float-wrap');
     const joyBase = document.getElementById('joystick-base');
     const joyKnob = document.getElementById('joystick-knob');
     const sprintLockPill = document.getElementById('joystick-sprint-lock');
-    const maxRadius = 46;
+    const walkRadius = 46;
+    const sprintTriggerDist = 52; // Must push OUTSIDE the 46px walk ring to sprint!
 
     const updateKnob = (px, py, sprinting, lockHovered) => {
       if (joyKnob) joyKnob.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
@@ -216,7 +250,9 @@ export class PlayerController {
           if (this.joyTouchId === null) {
             this.joyTouchId = t.identifier;
             this.joyActive = true;
-            this.autoSprintLocked = false; // Touching stick cancels previous auto-sprint lock
+            this.joyBeyondRing = false;
+            this.joyLockHover = false;
+            this.setAutoSprintLock(false); // Touching stick cancels previous auto-sprint lock
             this.joyOrigin.x = t.clientX;
             this.joyOrigin.y = t.clientY;
             floatWrap.style.left = `${t.clientX}px`;
@@ -236,25 +272,33 @@ export class PlayerController {
             const rawDy = t.clientY - this.joyOrigin.y;
             const dist = Math.hypot(rawDx, rawDy);
 
-            // PUBG Sprint-Lock zone: dragging thumb high above stick (rawDy < -98px)
-            const lockHover = rawDy < -96 && Math.abs(rawDx) < 55;
-            this.joyRawUp = -rawDy;
+            // True PUBG Sprint: ONLY when dragged outside the 46px walk ring in the forward sector!
+            const inForwardCone = rawDy < -36 && Math.abs(rawDx) < Math.abs(rawDy) * 0.85;
+            this.joyBeyondRing = dist > sprintTriggerDist && inForwardCone;
 
+            // PUBG Sprint-Lock zone: dragging thumb high into top lock pill (rawDy < -92px)
+            const prevLockHover = this.joyLockHover;
+            this.joyLockHover = rawDy < -92 && Math.abs(rawDx) < 56;
+            if (this.joyLockHover && !prevLockHover) this._haptic(16);
+
+            const visualRadius = this.joyBeyondRing ? 56 : walkRadius;
             let clampedX = rawDx;
             let clampedY = rawDy;
-            if (dist > maxRadius) {
-              clampedX = (rawDx / dist) * maxRadius;
-              clampedY = (rawDy / dist) * maxRadius;
+            if (dist > visualRadius) {
+              clampedX = (rawDx / dist) * visualRadius;
+              clampedY = (rawDy / dist) * visualRadius;
             }
 
-            const nx = clampedX / maxRadius;
-            const ny = clampedY / maxRadius;
+            const normDist = Math.min(1.0, dist / walkRadius);
+            const dirX = dist > 1e-4 ? rawDx / dist : 0;
+            const dirY = dist > 1e-4 ? rawDy / dist : 0;
+            const nx = dirX * normDist;
+            const ny = dirY * normDist;
+
             this.joyVec.x = Math.abs(nx) < 0.08 ? 0 : nx;
             this.joyVec.y = Math.abs(ny) < 0.08 ? 0 : ny;
 
-            // Integrated PUBG Sprint: push stick forward > 78%
-            const sprintingNow = (-ny > 0.78 && Math.abs(nx) < 0.65) || lockHover;
-            updateKnob(clampedX, clampedY, sprintingNow, lockHover);
+            updateKnob(clampedX, clampedY, this.joyBeyondRing || this.joyLockHover, this.joyLockHover);
             e.preventDefault();
             break;
           }
@@ -264,15 +308,16 @@ export class PlayerController {
       const endJoy = (e) => {
         for (const t of e.changedTouches) {
           if (t.identifier === this.joyTouchId) {
-            // If released while hovering in the top Sprint-Lock pill, lock continuous PUBG auto-sprint!
-            if (this.joyRawUp > 96) {
-              this.autoSprintLocked = true;
+            if (this.joyLockHover) {
+              this.setAutoSprintLock(true);
+              this._haptic(22);
             }
             this.joyTouchId = null;
             this.joyActive = false;
+            this.joyBeyondRing = false;
+            this.joyLockHover = false;
             this.joyVec.x = 0;
             this.joyVec.y = 0;
-            this.joyRawUp = 0;
             floatWrap.classList.add('hidden');
             updateKnob(0, 0, false, false);
             break;
@@ -309,22 +354,20 @@ export class PlayerController {
     if (this.joyActive) {
       moveForward -= this.joyVec.y;
       moveRight += this.joyVec.x;
-      // Integrated PUBG Sprint when thumb pushed forward > 78%!
-      if (-this.joyVec.y > 0.78 && Math.abs(this.joyVec.x) < 0.65) {
+      if (this.joyBeyondRing || this.joyLockHover) {
         joySprinting = true;
       }
     } else if (this.autoSprintLocked) {
-      // PUBG Auto-Sprint Lock active!
       moveForward = 1;
       joySprinting = true;
     }
 
     const inputMag = Math.min(1, Math.hypot(moveForward, moveRight));
     this.isActuallySprinting =
-      (this.isSprintingKey || joySprinting) && inputMag > 0.3 && moveForward > 0.1;
+      (this.isSprintingKey || joySprinting) && inputMag > 0.3 && moveForward > 0.15;
 
-    // Smooth Dynamic FOV rush (+8.5°) when sprinting!
-    const targetFovBoost = this.isActuallySprinting ? 8.5 : 0;
+    // Smooth Dynamic FOV rush (+8.0°) when sprinting
+    const targetFovBoost = this.isActuallySprinting ? 8.0 : 0;
     this.currentFovBoost += (targetFovBoost - this.currentFovBoost) * Math.min(1, dt * 7.5);
     const desiredFov = this.settings.data.fov + this.currentFovBoost;
     if (Math.abs(this.camera.fov - desiredFov) > 0.05) {
@@ -349,45 +392,48 @@ export class PlayerController {
       this.position.x += this._moveDir.x * speed * dt;
       this.position.z += this._moveDir.z * speed * dt;
 
-      const hitBoundary = this.physics.resolveHorizontal(this.position, 0.34);
+      const hitBoundary = this.physics.resolveHorizontal(this.position, 0.36);
       if (hitBoundary && this.boundaryWarnCooldown <= 0 && this.onBoundaryHit) {
         this.boundaryWarnCooldown = 8.0;
-        this.autoSprintLocked = false;
+        this.setAutoSprintLock(false);
         this.onBoundaryHit();
       }
     }
 
-    // Real Vertical Physics: Gravity, Jumping, and Climbing onto Rocks/Jeep/Crates/Hills!
+    // Vertical Physics: Gravity, Jumping, and Downhill Ground-Snapping (zero downhill stutter!)
     const ground = this.physics.getGroundInfo(this.position.x, this.position.z, this.position.y);
     this.currentSurface = ground.surface;
+    const heightAboveGround = this.position.y - ground.groundY;
 
-    if (!this.onGround || this.position.y > ground.groundY + 0.06) {
+    if (this.isJumping || !this.onGround || heightAboveGround > 0.38) {
+      this.onGround = false;
       this.vy += this.gravity * dt;
       this.position.y += this.vy * dt;
       if (this.position.y <= ground.groundY) {
         this.position.y = ground.groundY;
-        if (this.vy < -3.0) {
+        if (this.vy < -3.2) {
           this.audio.playFootstep(this.currentSurface, true);
         }
         this.vy = 0;
         this.onGround = true;
+        this.isJumping = false;
       }
     } else {
-      // Smoothly follow sand dunes & gentle step-up surfaces
-      this.position.y += (ground.groundY - this.position.y) * Math.min(1, dt * 18);
+      // Smoothly glue feet to sand dunes both uphill AND downhill when walking/sprinting!
+      this.position.y += (ground.groundY - this.position.y) * Math.min(1, dt * 24);
       this.vy = 0;
       this.onGround = true;
     }
 
     this.isInsideHouse = this.physics.isInsideBuilding(this.position);
 
-    // Walking / Sprinting Head-Bob & Footsteps (paused while airborne!)
+    // Walking / Sprinting Head-Bob & Footsteps
     let bobY = 0;
     let bobX = 0;
     if (this.onGround && movingSpeed > 0.35) {
-      const freq = this.isActuallySprinting ? 13.0 : 7.6;
-      const ampY = this.isActuallySprinting ? 0.09 : 0.044;
-      const ampX = this.isActuallySprinting ? 0.044 : 0.022;
+      const freq = this.isActuallySprinting ? 12.8 : 7.6;
+      const ampY = this.isActuallySprinting ? 0.082 : 0.042;
+      const ampX = this.isActuallySprinting ? 0.04 : 0.02;
       this.bobTimer += dt * freq;
       const sinVal = Math.sin(this.bobTimer);
       bobY = sinVal * ampY;
@@ -398,7 +444,7 @@ export class PlayerController {
       }
       this.lastStepSign = sinVal;
     } else if (this.onGround) {
-      bobY = Math.sin(elapsed * 1.45) * 0.012;
+      bobY = Math.sin(elapsed * 1.45) * 0.011;
       this.lastStepSign = 0;
     }
 
@@ -415,7 +461,7 @@ export class PlayerController {
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
-    this.camera.rotation.z = bobX * (this.isActuallySprinting ? -0.3 : -0.15);
+    this.camera.rotation.z = bobX * (this.isActuallySprinting ? -0.28 : -0.14);
   }
 
   _updateActiveInteractable(activeItem) {

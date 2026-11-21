@@ -87,10 +87,10 @@
 
     <!-- ==================== ULTRA-CLEAN ZERO-DISTRACTION HUD ==================== -->
     <div id="hud-layer" class="hidden">
-      <!-- Single Sleek Top-Center Current Mission Banner (Only ONE mission visible!) -->
+      <!-- Single Sleek Top-Center Current Mission Banner + Directional Compass Arrow -->
       <div id="mission-bar">
         <div class="mission-main">
-          <span class="mission-diamond">◈</span>
+          <span id="hud-mission-arrow" class="mission-arrow" aria-hidden="true">▲</span>
           <span id="hud-mission-text">تفحّص البوصلة الملقاة على الصخرة القريبة</span>
           <span id="hud-mission-dist" class="mission-dist"></span>
         </div>
@@ -99,6 +99,12 @@
           <span id="hud-clock">١٢:١٥ ظهراً</span>
         </div>
       </div>
+
+      <!-- Persistent PUBG Auto-Sprint Lock Indicator (tap to cancel!) -->
+      <button id="auto-sprint-banner" class="auto-sprint-banner hidden" type="button">
+        <span>⚡ الركض التلقائي مُقفَل</span>
+        <span class="auto-sprint-cancel">إلغاء ✕</span>
+      </button>
 
       <!-- Minimal Top-Left Controls (FPS + Restore Fullscreen + Settings) -->
       <div class="hud-corner-left">
@@ -110,7 +116,7 @@
           </svg>
         </button>
         <button id="btn-restore-fs" class="minimal-circle-btn hidden" type="button" aria-label="ملء الشاشة" title="ملء الشاشة">⛶</button>
-        <span id="hud-fps-counter" class="fps-pill">60 FPS</span>
+        <span id="hud-fps-counter" class="fps-pill hidden">60 FPS</span>
       </div>
 
       <!-- Clean Subtle Center Reticle Dot -->
@@ -253,7 +259,7 @@
               <span>سطوع الشمس</span>
             </label>
             <label class="toggle-item">
-              <input id="opt-fps" type="checkbox" checked />
+              <input id="opt-fps" type="checkbox" />
               <span>عداد FPS</span>
             </label>
           </div>
@@ -275,12 +281,12 @@
         </header>
         <div class="controls-list">
           <div class="control-item">
-            <strong>الهواتف (ملء الشاشة الأفقي)</strong>
-            <p>اليسار: عصا الحركة • اليمين: سحب سريع للكاميرا بحساسية عالية • زر (ركض) للركض السريع بحلقة التحمل • زر (فحص) يظهر تلقائياً عند الاقتراب من المهمة الحالية.</p>
+            <strong>الهواتف (تحكم بأسلوب PUBG)</strong>
+            <p>اليسار: عصا حركة عائمة تظهر تحت إبهامك (المشي داخل الحلقة، واسحب للأمام خارج الحلقة للركض أو ارفعها للأيقونة لقفل الركض التلقائي) • اليمين: دوران سريع للكاميرا + زر (قفز) لتسلق الصخور والسيارة + زر (فحص) يظهر تلقائياً عند الاقتراب.</p>
           </div>
           <div class="control-item">
             <strong>الحاسوب</strong>
-            <p>WASD للحركة • Shift للركض الحقيقي • الفأرة للنظر • E للتفاعل مع المهمة • Esc للإعدادات.</p>
+            <p>WASD للحركة • Shift للركض • Space للقفز والتسلق • الفأرة للنظر • E للتفاعل مع المهمة • Esc للإعدادات.</p>
           </div>
         </div>
         <footer class="settings-footer">

@@ -120,6 +120,7 @@ export class StoryManager {
 
     this.missionIndex = 0;
     this.chapterComplete = false;
+    this._pendingEnding = false;
     this.freeRoam = false;
 
     this.queue = [];
@@ -137,6 +138,7 @@ export class StoryManager {
   reset() {
     this.missionIndex = 0;
     this.chapterComplete = false;
+    this._pendingEnding = false;
     this.freeRoam = false;
     this.queue = [];
     this.activeLine = null;
@@ -155,11 +157,11 @@ export class StoryManager {
     const m = this.getCurrentMission();
     if (!m) {
       this.house.setActiveMissionId(null);
-      this.ui.updateMission('اكتمل الفصل الأول — تجوّل بحرية في وقت العصر', null);
+      this.ui.updateMission('اكتمل الفصل الأول — تجوّل بحرية في وقت العصر', null, null);
       return;
     }
     this.house.setActiveMissionId(m.id);
-    this.ui.updateMission(m.objective, null);
+    this.ui.updateMission(m.objective, null, 0);
   }
 
   enqueueLine(text, style = 'thought', speaker = '') {
@@ -177,6 +179,11 @@ export class StoryManager {
     if (this.queue.length === 0) {
       this.activeLine = null;
       this.hideSubtitle();
+      if (this._pendingEnding && !this.freeRoam) {
+        this._pendingEnding = false;
+        this.cutscenes.startEndingVista();
+        this.ui.showEndingScreen();
+      }
       return;
     }
     this.activeLine = this.queue.shift();
@@ -240,12 +247,7 @@ export class StoryManager {
 
       if (m.id === 'radio' && !this.chapterComplete) {
         this.chapterComplete = true;
-        setTimeout(() => {
-          if (!this.freeRoam) {
-            this.cutscenes.startEndingVista();
-            this.ui.showEndingScreen();
-          }
-        }, 9800);
+        this._pendingEnding = true;
       }
     });
   }
@@ -260,18 +262,26 @@ export class StoryManager {
     return `${toArabicDigits(h12)}:${toArabicDigits(mm)} ${suffix}`;
   }
 
-  update(dt, isGameplay, playerPos) {
+  update(dt, isGameplay, playerPos, playerYaw = 0) {
     // Organic ~5-minute (300s) Noon -> Asr continuous sun drift
     if (isGameplay && !this.freeRoam && this.sky.targetTimeOfDay < 0.96) {
       this.sky.targetTimeOfDay = Math.min(0.96, this.sky.targetTimeOfDay + dt / 320);
     }
 
-    // Update single top mission bar with live distance to active mission!
+    // Update single top mission bar with live distance AND relative directional compass arrow!
     const activeTarget = this.house.getActiveInteractable();
     const m = this.getCurrentMission();
     if (isGameplay && m && activeTarget && playerPos) {
-      const distMeters = Math.max(1, Math.round(playerPos.distanceTo(activeTarget.worldPos)));
-      this.ui.updateMission(m.objective, `${toArabicDigits(distMeters)}م`);
+      const dx = activeTarget.worldPos.x - playerPos.x;
+      const dz = activeTarget.worldPos.z - playerPos.z;
+      const distMeters = Math.max(1, Math.round(Math.hypot(dx, dz)));
+      // Camera forward is (-sin(yaw), -cos(yaw)); compute signed clockwise angle to target
+      const targetAngle = Math.atan2(-dx, -dz);
+      let relRad = playerYaw - targetAngle;
+      while (relRad > Math.PI) relRad -= Math.PI * 2;
+      while (relRad < -Math.PI) relRad += Math.PI * 2;
+      const arrowDeg = (relRad * 180) / Math.PI;
+      this.ui.updateMission(m.objective, `${toArabicDigits(distMeters)}م`, arrowDeg);
     }
 
     this.ui.updateClock(this.getClockDisplay(this.sky.timeOfDay), this.sky.timeOfDay);

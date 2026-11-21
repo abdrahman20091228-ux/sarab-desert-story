@@ -3,18 +3,24 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { HOUSE_CENTER_X, HOUSE_CENTER_Z, HOUSE_BASE_Y, getTerrainHeight } from './TerrainMath.js';
 
 /**
- * Grand, Realistic Abandoned Desert Estate & Outpost ("محطة الرصد المنسية - القطاع ٧")
- * - Enlarged realistic scale: 15.2m wide x 12.6m deep x 4.35m tall!
- * - Crumbling mudbrick courtyard perimeter wall with arched desert entrance gateway
- * - 3 spacious walkable interior rooms: Main Hall, Nader's Research Study, and Communications Room
- * - Enlarged second-tier watchtower roof room, grand wooden veranda awning, and tall spinning wind-vane mast
- * - Strictly shows ONLY the active mission's glowing beacon (no cluttered markers!)
- * - Aggressive static mesh batching keeps total draw calls ultra-low for 60FPS!
+ * Grand, Realistic Abandoned Desert Estate & Outpost ("محطة الرصد المنسية - القطاع ٧") (v3.0):
+ * - Enlarged realistic scale: 15.2m wide x 12.6m deep x 4.35m tall
+ * - Authentic Poly Haven `rough_plaster_brick_02` adobe plaster walls with natural 1.4m brick scale + procedural plaster/dirt breakup
+ * - Real Poly Haven 3D photogrammetry scans placed inside & outside:
+ *   * `seadogs_compass` (Mission 1 antique brass compass)
+ *   * `wooden_crate_01` (supply crates on porch & hall)
+ *   * `painted_wooden_table` & `painted_wooden_chair_01` (Nader's research desk & chair)
+ *   * `vintage_oil_lamp` (glowing brass lantern on study desk)
+ *   * `jug_01` & `barrel_03` (ceramic water jug & weathered barrels)
+ * - Volumetric sun god-ray shafts pouring through the West Study and East windows!
+ * - Detailed iron cellar hatch with wood planks, bolt studs, chains & padlock (animates open smoothly!)
+ * - GPU-driven awning cloth flutter + aggressive static mesh batching (<28 total outdoor draw calls!)
  */
 export class AbandonedHouse {
-  constructor(scene, textureManager, physics, jeepWorldPos) {
+  constructor(scene, textureManager, modelManager, physics, jeepWorldPos) {
     this.scene = scene;
     this.tex = textureManager;
+    this.models = modelManager;
     this.physics = physics;
     this.jeepWorldPos = jeepWorldPos;
 
@@ -27,12 +33,15 @@ export class AbandonedHouse {
 
     this.windTurbine = null;
     this.windVane = null;
-    this.awningCloth = null;
+    this.awningTimeUniform = { value: 0 };
     this.radioGlowMat = null;
     this.radioLight = null;
     this.hatchMesh = null;
+    this.hatchTargetAngle = 0;
     this.switchLever = null;
+    this.switchTargetAngle = 0.6;
     this.compassNeedle = null;
+    this.godRayMat = null;
 
     this._createMaterials();
     this._buildMainEstate();
@@ -50,18 +59,39 @@ export class AbandonedHouse {
     this.adobeMat = new THREE.MeshStandardMaterial({
       map: adobe.map,
       normalMap: adobe.normalMap,
-      normalScale: new THREE.Vector2(1.25, 1.25),
-      roughness: 0.94,
+      normalScale: new THREE.Vector2(1.15, 1.15),
+      roughness: 0.93,
       metalness: 0.02,
       vertexColors: true,
     });
+
+    // World-space macro plaster/sand weathering shader so walls NEVER look repetitively tiled!
+    this.adobeMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vAdobeWorldPos;`)
+        .replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>\nvAdobeWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vAdobeWorldPos;`)
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+           float patch1 = sin(vAdobeWorldPos.x * 0.55 + vAdobeWorldPos.y * 0.8) * cos(vAdobeWorldPos.z * 0.55 - vAdobeWorldPos.y * 0.6);
+           float groundDust = smoothstep(1.35, 0.05, vAdobeWorldPos.y);
+           vec3 plasterVariation = mix(vec3(0.92, 0.87, 0.79), vec3(1.06, 1.01, 0.94), patch1 * 0.5 + 0.5);
+           diffuseColor.rgb *= plasterVariation;
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.72, 0.55), groundDust * 0.35);`
+        );
+    };
 
     const wood = this.tex.loadPBRSet('desert_wood', 1.6, 1.0);
     this.woodMat = new THREE.MeshStandardMaterial({
       map: wood.map,
       normalMap: wood.normalMap,
       normalScale: new THREE.Vector2(1.0, 1.0),
-      roughness: 0.9,
+      roughness: 0.88,
       metalness: 0.04,
     });
 
@@ -71,15 +101,15 @@ export class AbandonedHouse {
       normalMap: metal.normalMap,
       normalScale: new THREE.Vector2(1.1, 1.1),
       roughness: 0.72,
-      metalness: 0.56,
+      metalness: 0.52,
     });
 
-    const floor = this.tex.loadPBRSet('floor_tiles', 5.2, 4.4);
+    const floor = this.tex.loadPBRSet('floor_tiles', 4.8, 4.0);
     this.floorMat = new THREE.MeshStandardMaterial({
       map: floor.map,
       normalMap: floor.normalMap,
-      normalScale: new THREE.Vector2(1.15, 1.15),
-      roughness: 0.9,
+      normalScale: new THREE.Vector2(1.1, 1.1),
+      roughness: 0.88,
       metalness: 0.03,
       vertexColors: true,
     });
@@ -87,10 +117,21 @@ export class AbandonedHouse {
     const fabric = this.tex.loadPBRSet('tattered_fabric', 2.4, 2.0);
     this.fabricMat = new THREE.MeshStandardMaterial({
       map: fabric.map,
-      roughness: 0.96,
+      roughness: 0.95,
       metalness: 0.0,
       side: THREE.DoubleSide,
     });
+    // GPU vertex shader flutter for the porch awning canopy (zero CPU vertex loop!)
+    this.fabricMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.awningTimeUniform;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\nuniform float uTime;`)
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           transformed.y += sin(uTime * 3.5 + position.x * 1.8 + position.z * 1.5) * 0.045;`
+        );
+    };
 
     const rock = this.tex.loadPBRSet('sandstone_rock', 2.0, 2.0);
     this.stoneMat = new THREE.MeshStandardMaterial({
@@ -98,6 +139,13 @@ export class AbandonedHouse {
       normalMap: rock.normalMap,
       roughness: 0.94,
       metalness: 0.02,
+    });
+
+    const sandPbr = this.tex.loadPBRSet('sand', 2.0, 2.0);
+    this.sandDriftMat = new THREE.MeshStandardMaterial({
+      map: sandPbr.map,
+      normalMap: sandPbr.normalMap,
+      roughness: 0.92,
     });
 
     this.darkMetalMat = new THREE.MeshStandardMaterial({
@@ -111,15 +159,22 @@ export class AbandonedHouse {
       roughness: 0.36,
       metalness: 0.82,
     });
+
+    this.paperMat = new THREE.MeshStandardMaterial({
+      color: 0xe6d4aa,
+      roughness: 0.9,
+      side: THREE.DoubleSide,
+    });
   }
 
-  _createBakedBox(w, h, d, bottomAO = 0.76, topAO = 0.98) {
+  _createBakedBox(w, h, d, bottomAO = 0.74, topAO = 0.99) {
     const geo = new THREE.BoxGeometry(w, h, d, 1, 1, 1);
     const pos = geo.attributes.position;
     const norm = geo.attributes.normal;
     const uv = geo.attributes.uv;
     const cols = new Float32Array(pos.count * 3);
-    const tile = 2.8;
+    // Authentic 1.45m plaster/brick UV scale (fixes the giant 2.8m oversized brick look!)
+    const tile = 1.45;
 
     for (let i = 0; i < pos.count; i++) {
       const px = pos.getX(i);
@@ -148,7 +203,7 @@ export class AbandonedHouse {
     return geo;
   }
 
-  _addBox(x, y, z, w, h, d, addCollider = true, mat = this.adobeMat, castShadow = true) {
+  _addBox(x, y, z, w, h, d, addCollider = true, mat = this.adobeMat, castShadow = true, forceClimbable = null) {
     const geo = mat === this.adobeMat ? this._createBakedBox(w, h, d) : new THREE.BoxGeometry(w, h, d);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
@@ -160,20 +215,23 @@ export class AbandonedHouse {
       const wx = HOUSE_CENTER_X + x;
       const wz = HOUSE_CENTER_Z + z;
       this.physics.addBoxCollider(
-        wx - w * 0.5, wx + w * 0.5,
-        wz - d * 0.5, wz + d * 0.5,
-        y - h * 0.5, y + h * 0.5
+        wx - w * 0.5,
+        wx + w * 0.5,
+        wz - d * 0.5,
+        wz + d * 0.5,
+        y - h * 0.5,
+        y + h * 0.5,
+        forceClimbable
       );
     }
     return mesh;
   }
 
   _buildMainEstate() {
-    // Grand Realistic Desert Outpost: Width = 15.2m (x: -7.6..7.6), Depth = 12.6m (z: -6.3..6.3), Height = 4.35m!
     const H = 4.35;
-    const t = 0.56; // Massive authentic thick adobe mudbrick walls
+    const t = 0.56;
 
-    // Spacious interior cracked stone floor slab (y top = 0.16)
+    // Spacious interior stone floor slab (y top = 0.16)
     const floorGeo = new THREE.BoxGeometry(14.8, 0.24, 12.2, 4, 1, 4);
     const fp = floorGeo.attributes.position;
     const fc = new Float32Array(fp.count * 3);
@@ -191,84 +249,99 @@ export class AbandonedHouse {
     this.group.add(floorMesh);
 
     this.physics.addFloorZone(
-      HOUSE_CENTER_X - 7.3, HOUSE_CENTER_X + 7.3,
-      HOUSE_CENTER_Z - 6.0, HOUSE_CENTER_Z + 6.4,
-      0.16, 'stone'
+      HOUSE_CENTER_X - 7.3,
+      HOUSE_CENTER_X + 7.3,
+      HOUSE_CENTER_Z - 6.0,
+      HOUSE_CENTER_Z + 6.4,
+      0.16,
+      'stone'
     );
     this.physics.addInteriorZone(
-      HOUSE_CENTER_X - 7.1, HOUSE_CENTER_X + 7.1,
-      HOUSE_CENTER_Z - 5.9, HOUSE_CENTER_Z + 5.9,
-      -0.5, 4.6
+      HOUSE_CENTER_X - 7.1,
+      HOUSE_CENTER_X + 7.1,
+      HOUSE_CENTER_Z - 5.9,
+      HOUSE_CENTER_Z + 5.9,
+      -0.5,
+      4.6
     );
 
-    // Wide entrance stone threshold
     const step = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 1.6), this.stoneMat);
     step.position.set(0, 0.05, 6.85);
     step.receiveShadow = true;
     this.group.add(step);
 
-    // ---- FRONT WALL (+Z = +6.1) with grand 2.4m wide doorway (x: -1.2..1.2) + 2 shuttered windows ----
-    // Left section (x: -7.6 .. -1.2) with window at x: -5.4..-3.4
-    this._addBox(-6.5, H / 2, 6.1, 2.2, H, t);
-    this._addBox(-2.3, H / 2, 6.1, 2.2, H, t);
-    this._addBox(-4.4, 0.65, 6.1, 2.0, 1.3, t);
+    // ---- FRONT WALL (+Z = +6.1) with grand 2.4m wide doorway (x: -1.2..1.2) + 2 shuttered windows + architectural pilasters ----
+    this._addBox(-6.5, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
+    this._addBox(-2.3, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
+    this._addBox(-4.4, 0.65, 6.1, 2.0, 1.3, t, true, this.adobeMat, true, false);
     this._addBox(-4.4, 3.55, 6.1, 2.0, 1.6, t, false);
     this._addBox(-4.4, 1.32, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
     this._addBox(-4.4, 2.74, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
 
-    // Right section (x: +1.2 .. +7.6) with window at x: 3.4..5.4
-    this._addBox(2.3, H / 2, 6.1, 2.2, H, t);
-    this._addBox(6.5, H / 2, 6.1, 2.2, H, t);
-    this._addBox(4.4, 0.65, 6.1, 2.0, 1.3, t);
+    this._addBox(2.3, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
+    this._addBox(6.5, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
+    this._addBox(4.4, 0.65, 6.1, 2.0, 1.3, t, true, this.adobeMat, true, false);
     this._addBox(4.4, 3.55, 6.1, 2.0, 1.6, t, false);
     this._addBox(4.4, 1.32, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
     this._addBox(4.4, 2.74, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
 
-    // Doorway lintel & heavy wooden doorframe
+    // Doorway lintel, heavy wooden doorframe, and half-broken wooden door leaf swung inward!
     this._addBox(0, 3.68, 6.1, 2.5, 1.35, t, false);
     this._addBox(0, 2.98, 6.1, 2.75, 0.18, 0.66, false, this.woodMat);
     this._addBox(-1.22, 1.48, 6.1, 0.14, 2.96, 0.6, false, this.woodMat);
     this._addBox(1.22, 1.48, 6.1, 0.14, 2.96, 0.6, false, this.woodMat);
+    const openDoor = new THREE.Mesh(new THREE.BoxGeometry(1.05, 2.75, 0.08), this.woodMat);
+    openDoor.position.set(-1.12, 1.52, 5.45);
+    openDoor.rotation.y = 1.18;
+    this.group.add(openDoor);
 
-    // ---- BACK WALL (-Z = -6.1) with BACK COURTYARD EXIT DOORWAY (x: -1.1..+1.1) + study/radio windows ----
-    this._addBox(-4.35, H / 2, -6.1, 6.5, H, t);
-    this._addBox(4.35, H / 2, -6.1, 6.5, H, t);
+    // Exterior battered corner buttresses / pilasters (gives authentic Najdi/Arabian mudbrick fortress silhouette!)
+    this._addBox(-7.45, H * 0.48, 6.15, 0.78, H * 0.96, 0.78, false);
+    this._addBox(7.45, H * 0.48, 6.15, 0.78, H * 0.96, 0.78, false);
+    this._addBox(-7.45, H * 0.48, -6.15, 0.78, H * 0.96, 0.78, false);
+    this._addBox(7.45, H * 0.48, -6.15, 0.78, H * 0.96, 0.78, false);
+
+    // ---- BACK WALL (-Z = -6.1) with BACK COURTYARD EXIT DOORWAY (x: -1.1..+1.1) ----
+    this._addBox(-4.35, H / 2, -6.1, 6.5, H, t, true, this.adobeMat, true, false);
+    this._addBox(4.35, H / 2, -6.1, 6.5, H, t, true, this.adobeMat, true, false);
     this._addBox(0, 3.65, -6.1, 2.3, 1.4, t, false);
     this._addBox(0, 2.92, -6.1, 2.5, 0.16, 0.64, false, this.woodMat);
 
-    // ---- WEST WALL (-X = -7.35) with huge sunlit study window letting golden Asr sun pour in! ----
-    this._addBox(-7.35, H / 2, 3.85, t, H, 4.9);
-    this._addBox(-7.35, H / 2, -3.85, t, H, 4.9);
-    this._addBox(-7.35, 0.65, 0, t, 1.3, 2.8);
+    // ---- WEST WALL (-X = -7.35) with large sunlit study window ----
+    this._addBox(-7.35, H / 2, 3.85, t, H, 4.9, true, this.adobeMat, true, false);
+    this._addBox(-7.35, H / 2, -3.85, t, H, 4.9, true, this.adobeMat, true, false);
+    this._addBox(-7.35, 0.65, 0, t, 1.3, 2.8, true, this.adobeMat, true, false);
     this._addBox(-7.35, 3.55, 0, t, 1.6, 2.8, false);
     this._addBox(-7.35, 1.32, 0, 0.66, 0.12, 2.9, false, this.woodMat);
     this._addBox(-7.35, 2.75, 0, 0.66, 0.12, 2.9, false, this.woodMat);
 
-    // ---- EAST WALL (+X = +7.35) with high ventilation slot ----
-    this._addBox(7.35, H / 2, 3.6, t, H, 5.4);
-    this._addBox(7.35, H / 2, -3.6, t, H, 5.4);
-    this._addBox(7.35, 0.9, 0, t, 1.8, 1.8);
+    // ---- EAST WALL (+X = +7.35) with high ventilation window ----
+    this._addBox(7.35, H / 2, 3.6, t, H, 5.4, true, this.adobeMat, true, false);
+    this._addBox(7.35, H / 2, -3.6, t, H, 5.4, true, this.adobeMat, true, false);
+    this._addBox(7.35, 0.9, 0, t, 1.8, 1.8, true, this.adobeMat, true, false);
     this._addBox(7.35, 3.65, 0, t, 1.4, 1.8, false);
 
-    // ---- INTERIOR ROOM DIVIDER WALLS (creates 3 distinct spacious rooms!) ----
-    // West room divider (Study Room on left: x < -2.3) with wide doorway at z: 1.0..3.4
-    this._addBox(-2.3, H / 2, -2.5, 0.42, H, 7.0);
-    this._addBox(-2.3, H / 2, 4.75, 0.42, H, 2.6);
+    // ---- INTERIOR ROOM DIVIDER WALLS (3 spacious rooms + wooden door headers) ----
+    this._addBox(-2.3, H / 2, -2.5, 0.42, H, 7.0, true, this.adobeMat, true, false);
+    this._addBox(-2.3, H / 2, 4.75, 0.42, H, 2.6, true, this.adobeMat, true, false);
     this._addBox(-2.3, 3.65, 2.2, 0.42, 1.4, 2.6, false);
+    this._addBox(-2.3, 2.92, 2.2, 0.5, 0.14, 2.5, false, this.woodMat);
 
-    // East room divider (Communications Room on right: x > +2.6) with wide doorway at z: 1.0..3.4
-    this._addBox(2.6, H / 2, -2.5, 0.42, H, 7.0);
-    this._addBox(2.6, H / 2, 4.75, 0.42, H, 2.6);
+    this._addBox(2.6, H / 2, -2.5, 0.42, H, 7.0, true, this.adobeMat, true, false);
+    this._addBox(2.6, H / 2, 4.75, 0.42, H, 2.6, true, this.adobeMat, true, false);
     this._addBox(2.6, 3.65, 2.2, 0.42, 1.4, 2.6, false);
+    this._addBox(2.6, 2.92, 2.2, 0.5, 0.14, 2.5, false, this.woodMat);
 
-    // ---- ROOF SLAB, CRUMBLING PARAPETS & MASSIVE PROTRUDING TIMBER BEAMS ----
+    // ---- ROOF SLAB, CRUMBLING STEPPED PARAPETS & TIMBER BEAMS ----
     this._addBox(0, 4.46, 0, 15.2, 0.3, 12.6, false);
-    this._addBox(0, 4.88, 6.1, 15.2, 0.56, 0.38, false);
+    // Crumbling uneven parapet segments (not a single flat block!)
+    this._addBox(-4.2, 4.88, 6.1, 6.4, 0.56, 0.38, false);
+    this._addBox(4.4, 4.82, 6.1, 6.0, 0.46, 0.38, false);
     this._addBox(-7.4, 4.88, 0, 0.38, 0.56, 12.6, false);
     this._addBox(7.4, 4.82, -1.2, 0.38, 0.44, 10.0, false);
     this._addBox(0, 4.92, -6.1, 15.2, 0.62, 0.38, false);
 
-    // Protruding desert roof log beams (low-poly 5-sided trunks)
+    // Protruding desert roof log beams + fallen diagonal cracked beam inside hall
     const beamGeo = new THREE.CylinderGeometry(0.11, 0.12, 16.4, 5);
     beamGeo.rotateZ(Math.PI / 2);
     for (let z = -4.8; z <= 4.8; z += 1.9) {
@@ -278,22 +351,43 @@ export class AbandonedHouse {
       this.group.add(beam);
     }
 
-    // ---- GRAND SECOND-TIER ROOFTOP WATCHROOM (like our reference concept art!) ----
+    // ---- GRAND SECOND-TIER ROOFTOP WATCHROOM ----
     this._addBox(-2.4, 5.9, -2.0, 5.6, 2.6, 4.8, false);
     this._addBox(-2.4, 7.35, -4.25, 5.6, 0.36, 0.32, false);
     this._addBox(-2.4, 5.65, 0.45, 1.25, 1.8, 0.16, false, this.darkMetalMat, false);
 
-    // Drifted desert sand tongue spilling through front doorway
-    const sandPbr = this.tex.loadPBRSet('sand', 2, 2);
-    const driftGeo = new THREE.ConeGeometry(2.1, 0.32, 10);
-    driftGeo.scale(1.25, 1.0, 1.5);
-    const doorDrift = new THREE.Mesh(
-      driftGeo,
-      new THREE.MeshStandardMaterial({ map: sandPbr.map, roughness: 0.92 })
-    );
-    doorDrift.position.set(-0.2, 0.1, 5.1);
-    doorDrift.receiveShadow = true;
-    this.group.add(doorDrift);
+    // Exterior Wooden Ladder leaning against East wall up to the roof
+    const ladder = new THREE.Group();
+    ladder.position.set(7.72, 0, 2.6);
+    ladder.rotation.z = 0.14;
+    const railL = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 4.6, 5), this.woodMat);
+    railL.position.set(0, 2.3, -0.28);
+    const railR = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 4.6, 5), this.woodMat);
+    railR.position.set(0, 2.3, 0.28);
+    ladder.add(railL, railR);
+    for (let ry = 0.45; ry <= 4.2; ry += 0.45) {
+      const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.58, 5), this.woodMat);
+      rung.rotation.x = Math.PI / 2;
+      rung.position.set(0, ry, 0);
+      ladder.add(rung);
+    }
+    this.group.add(ladder);
+
+    // Windblown desert sand drifts piled naturally in interior & exterior corners
+    const driftPositions = [
+      { x: -0.2, y: 0.1, z: 5.1, sx: 2.2, sy: 0.32, sz: 2.6 },
+      { x: -6.4, y: 0.12, z: -5.1, sx: 1.8, sy: 0.38, sz: 1.8 },
+      { x: 6.3, y: 0.12, z: 5.0, sx: 1.6, sy: 0.34, sz: 1.7 },
+      { x: -1.6, y: 0.12, z: -5.3, sx: 1.5, sy: 0.28, sz: 1.4 },
+    ];
+    driftPositions.forEach((d) => {
+      const dGeo = new THREE.ConeGeometry(1.0, 1.0, 8);
+      dGeo.scale(d.sx, d.sy, d.sz);
+      const dm = new THREE.Mesh(dGeo, this.sandDriftMat);
+      dm.position.set(d.x, d.y, d.z);
+      dm.receiveShadow = true;
+      this.group.add(dm);
+    });
 
     // Baked soft ground shadow decal under estate
     const shGeo = new THREE.PlaneGeometry(21, 18);
@@ -304,7 +398,7 @@ export class AbandonedHouse {
         map: this.tex.createContactShadowTexture(),
         transparent: true,
         depthWrite: false,
-        opacity: 0.56,
+        opacity: 0.54,
       })
     );
     houseShadow.position.set(0, 0.03, 0.4);
@@ -312,25 +406,22 @@ export class AbandonedHouse {
   }
 
   _buildCourtyardWalls() {
-    // Crumbling desert compound front courtyard wall with grand open gateway! (Makes the house feel HUGE & lived-in!)
-    // Front low ruined walls at z = +10.2 with wide 4.2m central gate
-    this._addBox(-5.6, 0.95, 10.2, 6.8, 1.9, 0.48);
-    this._addBox(5.6, 0.85, 10.2, 6.8, 1.7, 0.48);
-    // Gate pillars
-    this._addBox(-2.25, 1.45, 10.2, 0.72, 2.9, 0.72);
-    this._addBox(2.25, 1.35, 10.2, 0.72, 2.7, 0.72);
-    // Weathered wooden arch lintel across courtyard gate!
+    this._addBox(-5.6, 0.95, 10.2, 6.8, 1.9, 0.48, true, this.adobeMat, true, true);
+    this._addBox(5.6, 0.85, 10.2, 6.8, 1.7, 0.48, true, this.adobeMat, true, true);
+    this._addBox(-2.25, 1.45, 10.2, 0.72, 2.9, 0.72, true, this.adobeMat, true, false);
+    this._addBox(2.25, 1.35, 10.2, 0.72, 2.7, 0.72, true, this.adobeMat, true, false);
     this._addBox(0, 2.85, 10.2, 5.2, 0.22, 0.42, false, this.woodMat);
 
-    // Side crumbling courtyard flank walls
-    this._addBox(-8.9, 0.85, 8.2, 0.46, 1.7, 4.2);
-    this._addBox(8.9, 0.75, 8.2, 0.46, 1.5, 4.2);
+    this._addBox(-8.9, 0.85, 8.2, 0.46, 1.7, 4.2, true, this.adobeMat, true, true);
+    this._addBox(8.9, 0.75, 8.2, 0.46, 1.5, 4.2, true, this.adobeMat, true, true);
   }
 
   _buildGrandAwning() {
-    // Wide front shaded veranda porch with fluttering tattered burlap canopy!
     const postCoords = [
-      [-6.6, 9.0], [-3.8, 9.0], [-1.5, 9.0], [1.6, 9.0],
+      [-6.6, 9.0],
+      [-3.8, 9.0],
+      [-1.5, 9.0],
+      [1.6, 9.0],
     ];
     postCoords.forEach(([px, pz]) => {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.85, 5), this.woodMat);
@@ -351,12 +442,10 @@ export class AbandonedHouse {
 
     const clothGeo = new THREE.PlaneGeometry(8.2, 3.0, 8, 4);
     clothGeo.rotateX(-Math.PI / 2 + 0.18);
-    this.clothBaseY = [];
     const cp = clothGeo.attributes.position;
     for (let i = 0; i < cp.count; i++) {
       const sag = Math.abs(Math.sin(cp.getX(i) * 1.1)) * -0.16;
       cp.setY(i, cp.getY(i) + sag);
-      this.clothBaseY.push(cp.getY(i));
     }
     clothGeo.computeVertexNormals();
 
@@ -367,12 +456,16 @@ export class AbandonedHouse {
   }
 
   _buildWindVaneTower() {
-    // Tall dramatic rusted lattice wind-vane & radio mast perched atop the enlarged estate!
     const tower = new THREE.Group();
     tower.position.set(3.8, 4.6, -2.4);
 
     const mastH = 7.4;
-    const legs = [[-0.75, -0.75], [0.75, -0.75], [-0.75, 0.75], [0.75, 0.75]];
+    const legs = [
+      [-0.75, -0.75],
+      [0.75, -0.75],
+      [-0.75, 0.75],
+      [0.75, 0.75],
+    ];
     legs.forEach(([lx, lz]) => {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, mastH, 5), this.metalMat);
       leg.position.set(lx * 0.5, mastH * 0.5, lz * 0.5);
@@ -395,7 +488,7 @@ export class AbandonedHouse {
       tower.add(b1, b2, b3, b4);
     }
 
-    // Rotating Wind Vane + Multi-blade Turbine
+    // Batch rotating wind-vane blades into 1 mesh!
     this.windVane = new THREE.Group();
     this.windVane.position.set(0, mastH + 0.2, 0);
     const tailArm = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 0.06), this.metalMat);
@@ -404,16 +497,20 @@ export class AbandonedHouse {
     tailFin.position.set(1.42, 0.05, 0);
     this.windVane.add(tailArm, tailFin);
 
-    this.windTurbine = new THREE.Group();
-    this.windTurbine.position.set(-0.58, 0, 0);
+    const bladeGeos = [];
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.0, 0.2), this.metalMat);
-      blade.position.set(0, Math.cos(a) * 0.62, Math.sin(a) * 0.62);
-      blade.rotation.x = a;
-      blade.rotation.y = 0.32;
-      this.windTurbine.add(blade);
+      const bGeo = new THREE.BoxGeometry(0.03, 1.0, 0.2);
+      const m = new THREE.Matrix4();
+      m.makeRotationFromEuler(new THREE.Euler(a, 0.32, 0));
+      m.setPosition(0, Math.cos(a) * 0.62, Math.sin(a) * 0.62);
+      bGeo.applyMatrix4(m);
+      bladeGeos.push(bGeo);
     }
+    const mergedBlades = mergeGeometries(bladeGeos, false);
+    bladeGeos.forEach((g) => g.dispose());
+    this.windTurbine = new THREE.Mesh(mergedBlades, this.metalMat);
+    this.windTurbine.position.set(-0.58, 0, 0);
 
     this.windVane.add(this.windTurbine);
     tower.add(this.windVane);
@@ -421,46 +518,178 @@ export class AbandonedHouse {
   }
 
   _buildInteriorRooms() {
-    // ===== ROOM 1: MAIN HALL (Heavy Iron Cellar Hatch + Supply Crates + Fallen Debris) =====
-    const hatchFrame = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.12, 2.05), this.darkMetalMat);
-    hatchFrame.position.set(0.0, 0.2, -1.6);
-    this.group.add(hatchFrame);
+    // ===== ROOM 1: MAIN HALL (Detailed Wood-and-Iron Cellar Hatch + Tattered Carpet + Real 3D Scanned Crates & Jug) =====
+    // Tattered Arabian woven rug in Main Hall
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.4), this.fabricMat);
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(0.1, 0.17, 2.1);
+    rug.receiveShadow = true;
+    this.group.add(rug);
 
-    this.hatchMesh = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.09, 1.78), this.metalMat);
-    this.hatchMesh.position.set(0.0, 0.26, -1.6);
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.028, 5, 10), this.darkMetalMat);
+    // Stone & iron cellar hatch surround with recessed cellar steps visible underneath when unlocked!
+    const cellarPit = new THREE.Mesh(
+      new THREE.BoxGeometry(1.68, 0.12, 1.68),
+      new THREE.MeshBasicMaterial({ color: 0x0b0704 })
+    );
+    cellarPit.position.set(0.0, 0.13, -1.6);
+    this.group.add(cellarPit);
+
+    this._addBox(-0.94, 0.21, -1.6, 0.18, 0.1, 2.06, false, this.stoneMat);
+    this._addBox(0.94, 0.21, -1.6, 0.18, 0.1, 2.06, false, this.stoneMat);
+    this._addBox(0.0, 0.21, -2.54, 1.7, 0.1, 0.18, false, this.stoneMat);
+    this._addBox(0.0, 0.21, -0.66, 1.7, 0.1, 0.18, false, this.stoneMat);
+
+    // Pivot hinged hatch door with wooden planks, iron cross-straps, and heavy ring handle (NOT a black box!)
+    this.hatchMesh = new THREE.Group();
+    this.hatchMesh.position.set(0.0, 0.24, -2.45); // Pivots at back hinges!
+    const hatchPlanks = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.08, 1.72), this.woodMat);
+    hatchPlanks.position.set(0, 0, 0.85);
+    hatchPlanks.castShadow = true;
+    hatchPlanks.receiveShadow = true;
+    const strap1 = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.1, 0.14), this.metalMat);
+    strap1.position.set(0, 0.01, 0.35);
+    const strap2 = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.1, 0.14), this.metalMat);
+    strap2.position.set(0, 0.01, 1.35);
+    const strapMid = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 1.76), this.metalMat);
+    strapMid.position.set(0, 0.01, 0.85);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.028, 6, 12), this.brassMat);
     handle.rotation.x = Math.PI / 2;
-    handle.position.set(0, 0.07, 0.56);
-    this.hatchMesh.add(handle);
+    handle.position.set(0, 0.07, 1.48);
+    this.hatchMesh.add(hatchPlanks, strap1, strap2, strapMid, handle);
     this.group.add(this.hatchMesh);
 
-    // Wooden supply crates in Hall corner
-    this._addBox(1.5, 0.62, -4.9, 1.05, 0.9, 0.9, true, this.woodMat);
-    this._addBox(-1.4, 0.52, -5.0, 0.85, 0.7, 0.85, true, this.woodMat);
+    // Real Poly Haven 3D scanned wooden supply crates & ceramic water jug in Main Hall!
+    const crate1 = this.models?.createMesh('crate', 1.35);
+    if (crate1) {
+      crate1.position.set(1.45, 0.16, -4.85);
+      crate1.rotation.y = 0.28;
+      crate1.castShadow = true;
+      this.group.add(crate1);
+    } else {
+      this._addBox(1.45, 0.52, -4.85, 1.1, 0.75, 0.75, false, this.woodMat);
+    }
+    this.physics.addBoxCollider(
+      HOUSE_CENTER_X + 0.8,
+      HOUSE_CENTER_X + 2.1,
+      HOUSE_CENTER_Z - 5.3,
+      HOUSE_CENTER_Z - 4.4,
+      0.16,
+      0.88,
+      true
+    );
+
+    const jugMesh = this.models?.createMesh('jug', 0.55);
+    if (jugMesh) {
+      jugMesh.position.set(1.35, 0.73, -4.82);
+      jugMesh.castShadow = true;
+      this.group.add(jugMesh);
+    }
 
     // ===== ROOM 2: NADER'S RESEARCH STUDY (West Room: x < -2.3) =====
-    // Large weathered research desk bathed in golden west-window sunlight!
-    this._addBox(-5.4, 0.96, -0.4, 1.85, 0.1, 1.05, true, this.woodMat);
-    [[-6.2, -0.84], [-4.6, -0.84], [-6.2, 0.04], [-4.6, 0.04]].forEach(([lx, lz]) => {
-      this._addBox(lx, 0.54, lz, 0.1, 0.82, 0.1, false, this.woodMat, false);
-    });
-    // Brass oil lantern & wall expedition board
-    const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.34, 8), this.brassMat);
-    lantern.position.set(-6.0, 1.18, -0.68);
-    this.group.add(lantern);
-    // Corkboard map on back wall of study
-    this._addBox(-4.8, 2.25, -5.75, 2.4, 1.45, 0.08, false, this.woodMat, false);
+    // Real Poly Haven 3D scanned `painted_wooden_table` & `painted_wooden_chair_01` & `vintage_oil_lamp`!
+    const deskMesh = this.models?.createMesh('table', 2.25);
+    if (deskMesh) {
+      deskMesh.position.set(-5.35, 0.16, -0.4);
+      deskMesh.castShadow = true;
+      deskMesh.receiveShadow = true;
+      this.group.add(deskMesh);
+    } else {
+      this._addBox(-5.35, 0.96, -0.4, 2.1, 0.1, 1.05, false, this.woodMat);
+    }
+    this.physics.addBoxCollider(
+      HOUSE_CENTER_X - 6.45,
+      HOUSE_CENTER_X - 4.25,
+      HOUSE_CENTER_Z - 0.98,
+      HOUSE_CENTER_Z + 0.18,
+      0.16,
+      1.08,
+      true
+    );
 
-    // Tilted wooden study chair
-    this._addBox(-4.5, 0.45, 0.85, 0.55, 0.52, 0.55, true, this.woodMat, false);
+    const chairMesh = this.models?.createMesh('chair', 0.58);
+    if (chairMesh) {
+      chairMesh.position.set(-4.65, 0.16, 0.78);
+      chairMesh.rotation.y = -2.4;
+      chairMesh.castShadow = true;
+      this.group.add(chairMesh);
+    }
+
+    const lampMesh = this.models?.createMesh('lantern', 0.13);
+    if (lampMesh) {
+      lampMesh.position.set(-6.05, 1.06, -0.62);
+      lampMesh.castShadow = true;
+      this.group.add(lampMesh);
+    }
+
+    // Scattered research papers & maps on the desk and study floor + corkboard on study wall
+    this._addBox(-4.8, 2.25, -5.75, 2.4, 1.45, 0.08, false, this.woodMat, false);
+    const papers = [
+      { x: -4.9, y: 2.3, z: -5.69, rx: 0, ry: 0, rz: 0.06, w: 0.52, h: 0.38 },
+      { x: -4.2, y: 2.18, z: -5.69, rx: 0, ry: 0, rz: -0.08, w: 0.42, h: 0.46 },
+      { x: -5.55, y: 2.22, z: -5.69, rx: 0, ry: 0, rz: 0.03, w: 0.45, h: 0.34 },
+      { x: -4.85, y: 1.07, z: -0.45, rx: -Math.PI / 2, ry: 0, rz: 0.4, w: 0.32, h: 0.24 },
+      { x: -5.1, y: 0.175, z: 0.45, rx: -Math.PI / 2, ry: 0, rz: 1.1, w: 0.34, h: 0.25 },
+    ];
+    papers.forEach((p) => {
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), this.paperMat);
+      pm.position.set(p.x, p.y, p.z);
+      pm.rotation.set(p.rx, p.ry, p.rz);
+      this.group.add(pm);
+    });
 
     // Tall rusted bookshelf along west room partition
-    this._addBox(-2.85, 1.35, -3.4, 0.62, 2.4, 2.2, true, this.metalMat);
+    this._addBox(-2.85, 1.35, -3.4, 0.62, 2.4, 2.2, true, this.metalMat, true, false);
+
+    // Soft Volumetric Golden Sunlight God-Ray Shafts (Fresnel + longitudinal edge fade — ZERO hard cylinder edges!)
+    this.godRayUniforms = {
+      uColor: { value: new THREE.Color('#ffdfa0') },
+      uOpacity: { value: 0.16 },
+    };
+    this.godRayMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      uniforms: this.godRayUniforms,
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        varying vec3 vNormalV;
+        varying vec3 vViewDir;
+        void main() {
+          vUv = uv;
+          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          vNormalV = normalize(normalMatrix * normal);
+          vViewDir = normalize(-mvPos.xyz);
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        varying vec3 vNormalV;
+        varying vec3 vViewDir;
+        void main() {
+          float fresnel = pow(abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.75);
+          float lengthFade = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
+          float alpha = fresnel * lengthFade * uOpacity;
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+    });
+    const rayGeo = new THREE.CylinderGeometry(0.72, 1.35, 3.8, 12, 1, true);
+    const westRay = new THREE.Mesh(rayGeo, this.godRayMat);
+    westRay.position.set(-5.65, 1.65, 0.0);
+    westRay.rotation.z = -0.86;
+    const frontRay = new THREE.Mesh(rayGeo, this.godRayMat);
+    frontRay.scale.set(0.68, 0.78, 0.68);
+    frontRay.position.set(-4.4, 1.55, 4.4);
+    frontRay.rotation.x = -0.82;
+    this.group.add(westRay, frontRay);
 
     // ===== ROOM 3: COMMUNICATIONS ROOM (East Room: x > +2.6) =====
-    // Wide communications workbench & heavy battery rack
-    this._addBox(5.2, 0.6, -4.4, 2.4, 0.92, 1.05, true, this.woodMat);
-    this._addBox(6.4, 1.3, 1.8, 0.85, 2.25, 1.9, true, this.metalMat);
+    this._addBox(5.2, 0.6, -4.4, 2.4, 0.92, 1.05, true, this.woodMat, true, true);
+    this._addBox(6.4, 1.3, 1.8, 0.85, 2.25, 1.9, true, this.metalMat, true, false);
 
     // Analog Field Radio (Mission 6 Climax!)
     const radioGroup = new THREE.Group();
@@ -496,18 +725,33 @@ export class AbandonedHouse {
   }
 
   _buildBackCourtyardAndWell() {
-    // Rusted oil drums around exterior
-    const drumGeo = new THREE.CylinderGeometry(0.36, 0.36, 1.05, 8);
-    [[8.3, 2.2], [8.6, 1.15], [-8.3, 4.4], [5.8, -7.8]].forEach(([dx, dz]) => {
-      const gy = getTerrainHeight(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz) - HOUSE_BASE_Y;
-      const drum = new THREE.Mesh(drumGeo, this.metalMat);
-      drum.position.set(dx, gy + 0.52, dz);
-      drum.castShadow = true;
-      this.group.add(drum);
-      this.physics.addCylinderCollider(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz, 0.44, gy + 1.3);
-    });
+    // Real Poly Haven 3D scanned `barrel_03` wooden barrels around exterior!
+    const barrelGeo = this.models?.getGeometry('barrel');
+    const barrelMat = this.models?.getMaterial('barrel') || this.metalMat;
+    const drumCoords = [
+      [8.3, 2.2],
+      [8.6, 1.15],
+      [-8.3, 4.4],
+      [5.8, -7.8],
+    ];
+    if (barrelGeo) {
+      const bInst = new THREE.InstancedMesh(barrelGeo, barrelMat, drumCoords.length);
+      bInst.castShadow = true;
+      const dummy = new THREE.Object3D();
+      drumCoords.forEach(([dx, dz], idx) => {
+        const gy = getTerrainHeight(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz) - HOUSE_BASE_Y;
+        dummy.position.set(dx, gy, dz);
+        dummy.rotation.set(0, idx * 1.1, 0);
+        dummy.scale.setScalar(0.72);
+        dummy.updateMatrix();
+        bInst.setMatrixAt(idx, dummy.matrix);
+        this.physics.addCylinderCollider(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz, 0.42, gy + 1.15);
+      });
+      bInst.instanceMatrix.needsUpdate = true;
+      this.group.add(bInst);
+    }
 
-    // Collapsed stone water well in back oasis courtyard near the swaying palms!
+    // Collapsed stone water well in back oasis courtyard
     const wellX = -6.8;
     const wellZ = -10.4;
     const wellY = getTerrainHeight(HOUSE_CENTER_X + wellX, HOUSE_CENTER_Z + wellZ) - HOUSE_BASE_Y;
@@ -517,7 +761,10 @@ export class AbandonedHouse {
     const wellRing = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.42, 1.05, 10, 1, true), this.stoneMat);
     wellRing.position.y = 0.5;
     wellRing.castShadow = true;
-    const wellDark = new THREE.Mesh(new THREE.CircleGeometry(1.22, 10), new THREE.MeshBasicMaterial({ color: 0x090604 }));
+    const wellDark = new THREE.Mesh(
+      new THREE.CircleGeometry(1.22, 10),
+      new THREE.MeshBasicMaterial({ color: 0x090604 })
+    );
     wellDark.rotation.x = -Math.PI / 2;
     wellDark.position.y = 0.42;
     const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.3, 0.14), this.woodMat);
@@ -532,33 +779,34 @@ export class AbandonedHouse {
     this.group.add(wellGroup);
     this.physics.addCylinderCollider(HOUSE_CENTER_X + wellX, HOUSE_CENTER_Z + wellZ, 1.5, wellY + 1.8);
 
-    // Wind-Vane Antenna Breaker Box on back-east wall near the courtyard exit (Mission 5!)
+    // Wind-Vane Antenna Breaker Box on back-east wall (Mission 5!)
     const boxGroup = new THREE.Group();
     boxGroup.position.set(4.1, 1.48, -6.58);
     const housing = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.32), this.metalMat);
     housing.castShadow = true;
     this.switchLever = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.34, 0.18), this.brassMat);
     this.switchLever.position.set(0.1, 0.04, -0.2);
-    this.switchLever.rotation.x = 0.6; // OFF position
+    this.switchLever.rotation.x = 0.6;
     boxGroup.add(housing, this.switchLever);
     this.group.add(boxGroup);
   }
 
   _buildStoryClues() {
-    const registerClue = (id, label, worldPos, radius = 3.8) => {
+    const registerClue = (id, label, worldPos, radius = 3.8, ringYOffset = 0.14) => {
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.16, 0.24, 16),
+        new THREE.RingGeometry(0.14, 0.21, 18),
         new THREE.MeshBasicMaterial({
           color: 0xffd47a,
           transparent: true,
-          opacity: 0.92,
+          opacity: 0.94,
           side: THREE.DoubleSide,
           depthTest: false,
         })
       );
-      ring.position.copy(worldPos).add(new THREE.Vector3(0, 0.55, 0));
+      // Anchored tightly right at the clue object (never floating 0.55m away in mid-air!)
+      ring.position.copy(worldPos).add(new THREE.Vector3(0, ringYOffset, 0));
       ring.renderOrder = 12;
-      ring.visible = false; // Strictly hidden until this EXACT mission is active!
+      ring.visible = false;
       this.scene.add(ring);
 
       this.interactables.push({
@@ -570,49 +818,97 @@ export class AbandonedHouse {
       });
     };
 
-    // MISSION 1: Cracked Brass Compass flush on top of boulder near wake-up clearing (-8.2, 10.2)
-    const c1Y = getTerrainHeight(-8.2, 10.2) + 0.42;
+    // MISSION 1: Real Poly Haven 3D scanned `seadogs_compass` resting on top of the hero boulder (-8.2, 10.2)!
+    // Hero boulder has sy = 1.55, sink = 0.04*1.55 = 0.062, topY = terrainY + 1.55*0.44 - 0.062 = terrainY + 0.62
+    const c1Y = getTerrainHeight(-8.2, 10.2) + 0.56;
     const compassGroup = new THREE.Group();
     compassGroup.position.set(-8.2, c1Y, 10.2);
-    compassGroup.add(
-      new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 12), this.brassMat),
-      new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.065, 12), new THREE.MeshStandardMaterial({ color: 0xefe3c8 }))
+
+    const realCompass = this.models?.createMesh('compass', 0.38);
+    if (realCompass) {
+      compassGroup.add(realCompass);
+    } else {
+      compassGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 12), this.brassMat));
+    }
+    const needle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.022, 0.022, 0.18),
+      new THREE.MeshBasicMaterial({ color: 0xc2281c })
     );
-    const needle = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.024, 0.2), new THREE.MeshBasicMaterial({ color: 0xc2281c }));
-    needle.position.y = 0.036;
+    needle.position.y = 0.065;
     this.compassNeedle = needle;
     compassGroup.add(needle);
     this.scene.add(compassGroup);
-    registerClue('compass', 'فحص البوصلة المحطمة', new THREE.Vector3(-8.2, c1Y, 10.2), 4.0);
+    registerClue('compass', 'فحص البوصلة المحطمة', new THREE.Vector3(-8.2, c1Y + 0.04, 10.2), 4.0, 0.11);
 
     // MISSION 2: Buried Expedition 4x4 Jeep Wreck along the sand trail
-    registerClue('jeep', 'تفتيش حطام سيارة البعثة', this.jeepWorldPos.clone(), 4.8);
+    registerClue('jeep', 'تفتيش حطام سيارة البعثة', this.jeepWorldPos.clone(), 4.8, 0.18);
 
-    // MISSION 3: Expedition Satchel & Dry Canteen on veranda porch crate
-    this._addBox(-3.2, 0.36, 7.6, 0.85, 0.68, 0.72, true, this.woodMat);
-    const canteen = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.16, 0.32, 10), this.metalMat);
+    // MISSION 3: Expedition Satchel & Canteen on real Poly Haven 3D scanned porch crate!
+    const porchCrate = this.models?.createMesh('crate', 1.15);
+    if (porchCrate) {
+      porchCrate.position.set(-3.2, 0.02, 7.6);
+      porchCrate.castShadow = true;
+      this.group.add(porchCrate);
+    } else {
+      this._addBox(-3.2, 0.26, 7.6, 0.85, 0.5, 0.72, false, this.woodMat);
+    }
+    this.physics.addBoxCollider(
+      HOUSE_CENTER_X - 3.75,
+      HOUSE_CENTER_X - 2.65,
+      HOUSE_CENTER_Z + 7.2,
+      HOUSE_CENTER_Z + 8.0,
+      0.0,
+      0.56,
+      true
+    );
+
+    const canteen = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.15, 0.3, 10), this.metalMat);
     canteen.rotation.z = 0.5;
-    canteen.position.set(-3.08, 0.82, 7.62);
-    const satchel = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.32), new THREE.MeshStandardMaterial({ color: 0x6e4b2c, roughness: 0.92 }));
-    satchel.position.set(-3.38, 0.77, 7.52);
+    canteen.position.set(-3.08, 0.59, 7.62);
+    const satchel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.14, 0.32),
+      new THREE.MeshStandardMaterial({ color: 0x6e4b2c, roughness: 0.92 })
+    );
+    satchel.position.set(-3.38, 0.55, 7.52);
     this.group.add(canteen, satchel);
-    registerClue('canteen', 'فحص حقيبة البعثة والزمزمية', new THREE.Vector3(HOUSE_CENTER_X - 3.2, HOUSE_BASE_Y + 0.85, HOUSE_CENTER_Z + 7.6), 3.8);
+    registerClue(
+      'canteen',
+      'فحص حقيبة البعثة والزمزمية',
+      new THREE.Vector3(HOUSE_CENTER_X - 3.2, HOUSE_BASE_Y + 0.62, HOUSE_CENTER_Z + 7.6),
+      3.8,
+      0.12
+    );
 
     // MISSION 4: Torn Field Journal on Nader's Desk inside the West Study Room
-    const journal = new THREE.Mesh(
-      new THREE.BoxGeometry(0.38, 0.05, 0.48),
-      new THREE.MeshStandardMaterial({ color: 0xe3cf9f, roughness: 0.88 })
-    );
-    journal.position.set(-5.3, 1.05, -0.32);
+    const journal = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.05, 0.48), this.paperMat);
+    journal.position.set(-5.3, 1.07, -0.32);
     journal.rotation.y = 0.25;
     this.group.add(journal);
-    registerClue('journal', 'قراءة دفتر ملاحظات نادر', new THREE.Vector3(HOUSE_CENTER_X - 5.3, HOUSE_BASE_Y + 1.1, HOUSE_CENTER_Z - 0.32), 3.8);
+    registerClue(
+      'journal',
+      'قراءة دفتر ملاحظات نادر',
+      new THREE.Vector3(HOUSE_CENTER_X - 5.3, HOUSE_BASE_Y + 1.1, HOUSE_CENTER_Z - 0.32),
+      3.8,
+      0.12
+    );
 
     // MISSION 5: Wind-Vane Breaker Box outside back-east courtyard wall
-    registerClue('antenna_box', 'تشغيل قاطع برج الهوائي', new THREE.Vector3(HOUSE_CENTER_X + 4.1, HOUSE_BASE_Y + 1.5, HOUSE_CENTER_Z - 6.75), 3.8);
+    registerClue(
+      'antenna_box',
+      'تشغيل قاطع برج الهوائي',
+      new THREE.Vector3(HOUSE_CENTER_X + 4.1, HOUSE_BASE_Y + 1.5, HOUSE_CENTER_Z - 6.75),
+      3.8,
+      0.08
+    );
 
     // MISSION 6: Analog Field Radio inside East Communications Room
-    registerClue('radio', 'تشغيل المذياع التناظري (تردد ٤٤)', new THREE.Vector3(HOUSE_CENTER_X + 5.15, HOUSE_BASE_Y + 1.35, HOUSE_CENTER_Z - 4.35), 4.0);
+    registerClue(
+      'radio',
+      'تشغيل المذياع التناظري (تردد ٤٤)',
+      new THREE.Vector3(HOUSE_CENTER_X + 5.15, HOUSE_BASE_Y + 1.38, HOUSE_CENTER_Z - 4.35),
+      4.0,
+      0.14
+    );
   }
 
   setActiveMissionId(id) {
@@ -631,27 +927,37 @@ export class AbandonedHouse {
   }
 
   setAntennaPowered(powered) {
-    if (this.switchLever) {
-      this.switchLever.rotation.x = powered ? -0.6 : 0.6;
-    }
+    this.switchTargetAngle = powered ? -0.65 : 0.6;
     if (this.radioGlowMat) {
-      this.radioGlowMat.emissiveIntensity = powered ? 2.1 : 0.04;
+      this.radioGlowMat.emissiveIntensity = powered ? 2.2 : 0.04;
     }
     if (this.radioLight) {
-      this.radioLight.intensity = powered ? 2.2 : 0;
+      this.radioLight.intensity = powered ? 2.3 : 0;
     }
   }
 
   unlockHatch() {
-    if (this.hatchMesh) {
-      this.hatchMesh.position.y = 0.38;
-      this.hatchMesh.rotation.x = -0.26;
-    }
+    this.hatchTargetAngle = -0.82; // Smoothly swings open 47 degrees on its hinges!
   }
 
   _optimizeStaticBatches() {
-    const batchableMats = new Set([this.adobeMat, this.woodMat, this.metalMat, this.darkMetalMat]);
-    const dynamicSet = new Set([this.awningCloth, this.hatchMesh, this.switchLever, this.windVane, this.windTurbine]);
+    const batchableMats = new Set([
+      this.adobeMat,
+      this.woodMat,
+      this.metalMat,
+      this.darkMetalMat,
+      this.stoneMat,
+      this.brassMat,
+      this.paperMat,
+      this.sandDriftMat,
+    ]);
+    const dynamicSet = new Set([
+      this.awningCloth,
+      this.hatchMesh,
+      this.switchLever,
+      this.windVane,
+      this.windTurbine,
+    ]);
 
     const isDynamic = (obj) => {
       let cur = obj;
@@ -668,7 +974,7 @@ export class AbandonedHouse {
     const toRemove = [];
 
     this.group.traverse((child) => {
-      if (!child.isMesh || !batchableMats.has(child.material) || isDynamic(child)) return;
+      if (!child.isMesh || child.isInstancedMesh || !batchableMats.has(child.material) || isDynamic(child)) return;
       const src = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
       const relMat = new THREE.Matrix4().multiplyMatrices(invGroup, child.matrixWorld);
       src.applyMatrix4(relMat);
@@ -701,7 +1007,7 @@ export class AbandonedHouse {
       geos.forEach((g) => g.dispose());
       if (merged) {
         const mesh = new THREE.Mesh(merged, mat);
-        mesh.castShadow = true;
+        mesh.castShadow = mat !== this.paperMat;
         mesh.receiveShadow = true;
         this.group.add(mesh);
       }
@@ -724,27 +1030,30 @@ export class AbandonedHouse {
       this.windVane.rotation.y = 0.35 + Math.sin(elapsed * 0.42) * 0.25;
     }
 
-    if (this.awningCloth) {
-      const cp = this.awningCloth.geometry.attributes.position;
-      const amp = 0.035 + timeOfDay * 0.025;
-      for (let i = 0; i < cp.count; i++) {
-        const x = cp.getX(i);
-        const z = cp.getZ(i);
-        cp.setY(i, this.clothBaseY[i] + Math.sin(elapsed * 3.4 + x * 1.8 + z * 1.5) * amp);
-      }
-      cp.needsUpdate = true;
+    this.awningTimeUniform.value = elapsed;
+
+    // Smoothly animate physical breaker lever & cellar hatch door
+    if (this.switchLever) {
+      this.switchLever.rotation.x += (this.switchTargetAngle - this.switchLever.rotation.x) * Math.min(1, dt * 10);
+    }
+    if (this.hatchMesh) {
+      this.hatchMesh.rotation.x += (this.hatchTargetAngle - this.hatchMesh.rotation.x) * Math.min(1, dt * 4.5);
+    }
+
+    if (this.godRayUniforms) {
+      this.godRayUniforms.uOpacity.value = THREE.MathUtils.lerp(0.14, 0.28, timeOfDay);
+      this.godRayUniforms.uColor.value.lerpColors(new THREE.Color('#fff0c4'), new THREE.Color('#ffae52'), timeOfDay);
     }
 
     if (this.compassNeedle) {
       this.compassNeedle.rotation.y = 0.4 + Math.sin(elapsed * 5.2) * 0.25 + Math.cos(elapsed * 13.0) * 0.08;
     }
 
-    // Pulse ONLY the single currently active mission beacon!
     const active = this.getActiveInteractable();
     if (active && active.ringMesh) {
       active.ringMesh.visible = true;
       active.ringMesh.lookAt(camera.position);
-      const pulse = 0.88 + Math.sin(elapsed * 4.0) * 0.2;
+      const pulse = 0.88 + Math.sin(elapsed * 4.0) * 0.18;
       active.ringMesh.scale.setScalar(pulse);
     }
   }

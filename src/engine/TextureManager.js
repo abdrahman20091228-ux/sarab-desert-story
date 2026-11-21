@@ -1,15 +1,20 @@
 import * as THREE from 'three';
 
+const IS_MOBILE =
+  typeof window !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
+    ('ontouchstart' in window && Math.min(window.innerWidth, window.innerHeight) < 920));
+
 /**
- * Loads and caches our generated PBR texture sets (albedo, normal, roughness)
- * and synthesizes lightweight procedural utility textures (baked contact shadow, dust motes).
+ * Loads and caches our real photographed Poly Haven / ambientCG PBR texture sets
+ * in ultra-fast WebP format (automatically using 512x512 tier on mobile GPUs to save 75% VRAM & bandwidth).
  */
 export class TextureManager {
   constructor(renderer) {
     this.renderer = renderer;
     this.loader = new THREE.TextureLoader();
     this.sets = new Map();
-    this.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    this.anisotropy = Math.min(IS_MOBILE ? 4 : 8, renderer.capabilities.getMaxAnisotropy());
   }
 
   setAnisotropy(val) {
@@ -37,10 +42,11 @@ export class TextureManager {
       return tex;
     };
 
+    const suffix = IS_MOBILE ? '_512.webp' : '.webp';
     const base = `./textures/${name}`;
-    const map = configure(this.loader.load(`${base}_albedo.jpg`), true);
-    const normalMap = configure(this.loader.load(`${base}_normal.jpg`), false);
-    const roughnessMap = configure(this.loader.load(`${base}_roughness.jpg`), false);
+    const map = configure(this.loader.load(`${base}_albedo${suffix}`), true);
+    const normalMap = configure(this.loader.load(`${base}_normal${suffix}`), false);
+    const roughnessMap = configure(this.loader.load(`${base}_roughness${suffix}`), false);
 
     const set = { map, normalMap, roughnessMap };
     this.sets.set(cacheKey, set);
@@ -49,12 +55,12 @@ export class TextureManager {
 
   createContactShadowTexture() {
     if (this._shadowTex) return this._shadowTex;
-    const size = 256;
+    const size = 128;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size / 2);
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 6, size / 2, size / 2, size / 2);
     grad.addColorStop(0.0, 'rgba(22, 12, 5, 0.56)');
     grad.addColorStop(0.45, 'rgba(28, 16, 7, 0.34)');
     grad.addColorStop(0.78, 'rgba(34, 20, 9, 0.10)');
@@ -95,7 +101,6 @@ export class TextureManager {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, w, h);
 
-    // Soft recessed shoe print in sand
     const drawOval = (cx, cy, rx, ry, alpha) => {
       ctx.save();
       ctx.translate(cx, cy);

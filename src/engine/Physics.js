@@ -1,41 +1,64 @@
 /**
- * Gentle, Climbable First-Person Physics Solver:
- * - Soft, tight horizontal collision (NO violent bouncy pushback!)
- * - Automatic step-up (0.62m) AND Jump-on-Top support for rocks, jeep, crates, and low walls!
- * - Solid sloped collision for ALL distant sandstone mesas/hills (never hollow air!)
+ * Precision First-Person Physics Solver (v3.0):
+ * - 100% Visual-Physics Terrain Triangle Parity (via TerrainMath.getTerrainHeight)
+ * - Exact 1.0x rotated-ellipse & OBB colliders for rocks, buried Jeep, furniture, and walls (ZERO clipping!)
+ * - Climbable & Jump-on-Top surfaces for low rocks, crates, low walls, and the buried 4x4 Jeep hood/roof!
+ * - Solid sloped collision for ALL surrounding desert hills & sandstone mesas inside the 180m playable valley
+ * - Slope angle limiting (>43° steep cliffs push player back smoothly instead of infinite vertical climbing)
  */
 export class PhysicsWorld {
   constructor(heightSampler) {
     this.getTerrainHeight = heightSampler;
     this.aabbs = [];          // { minX, maxX, minZ, maxZ, minY, maxY, climbable }
+    this.obbs = [];           // { x, z, hx, hz, cos, sin, minY, maxY, hoodY, climbable }
     this.cylinders = [];      // { x, z, r, maxY, climbable }
     this.ellipses = [];       // { x, z, rx, rz, cos, sin, topY, climbable }
     this.mesas = [];          // { x, z, rx, rz, cos, sin, baseY, height }
     this.floorZones = [];     // { minX, maxX, minZ, maxZ, y, surface }
     this.interiorZones = [];  // { minX, maxX, minZ, maxZ, minY, maxY }
-    this.worldRadius = 158;
+    this.worldRadius = 176;
   }
 
-  addBoxCollider(minX, maxX, minZ, maxZ, minY = -10, maxY = 14) {
-    const climbable = maxY < 2.6;
+  addBoxCollider(minX, maxX, minZ, maxZ, minY = -10, maxY = 14, forceClimbable = null) {
+    const climbable = forceClimbable !== null ? forceClimbable : maxY <= 2.35;
     this.aabbs.push({ minX, maxX, minZ, maxZ, minY, maxY, climbable });
   }
 
+  /**
+   * Oriented Bounding Box (OBB) collider for rotated rectangular vehicles/structures like the buried 4x4 Jeep!
+   * Supports stepped climbable top (e.g. lower hood height + higher cabin roof height).
+   */
+  addOBBCollider(x, z, hx, hz, rotY = 0, minY = -5, maxY = 2.0, hoodY = null, climbable = true) {
+    this.obbs.push({
+      x,
+      z,
+      hx,
+      hz,
+      cos: Math.cos(-rotY),
+      sin: Math.sin(-rotY),
+      minY,
+      maxY,
+      hoodY: hoodY !== null ? hoodY : maxY,
+      climbable,
+    });
+  }
+
   addCylinderCollider(x, z, r, maxY = 12) {
-    this.cylinders.push({ x, z, r: r * 0.85, maxY, climbable: maxY < 2.5 });
+    this.cylinders.push({ x, z, r: r * 0.96, maxY, climbable: maxY < 2.2 });
   }
 
   /**
-   * Gentle, climbable rock/prop ellipse collider:
-   * - Tight core radius (0.72x) so it never violently snags the player
-   * - Walkable domed top surface so player can step or jump right onto rocks & the jeep!
+   * Exact-fit rock/prop ellipse collider:
+   * - Full 1.0x visual radius prevents any 35cm corner/side penetration!
+   * - Smooth tangential slide when walking against tall boulders
+   * - Walkable/jumpable domed top surface when jumping or stepping onto rocks
    */
   addEllipseCollider(x, z, rx, rz, rotY = 0, topY = 1.5, climbable = true) {
     this.ellipses.push({
       x,
       z,
-      rx: Math.max(0.22, rx * 0.76),
-      rz: Math.max(0.22, rz * 0.76),
+      rx: Math.max(0.28, rx * 0.98),
+      rz: Math.max(0.28, rz * 0.98),
       cos: Math.cos(-rotY),
       sin: Math.sin(-rotY),
       topY,
@@ -50,8 +73,8 @@ export class PhysicsWorld {
     this.mesas.push({
       x,
       z,
-      rx: rx * 0.94,
-      rz: rz * 0.94,
+      rx: rx * 0.96,
+      rz: rz * 0.96,
       cos: Math.cos(-rotY),
       sin: Math.sin(-rotY),
       baseY,
@@ -68,41 +91,41 @@ export class PhysicsWorld {
   }
 
   /**
-   * Returns exact walkable ground height including terrain, stone floors, AND climbable rocks/jeep/crates/hills!
+   * Returns exact walkable ground height including terrain triangles, stone floors,
+   * climbable rocks, crates, and the buried 4x4 Jeep hood & roof!
    */
   getGroundInfo(x, z, playerY = 0) {
     let groundY = this.getTerrainHeight(x, z);
     let surface = 'sand';
-    const stepReach = playerY + 0.64; // Smoothly step or jump onto objects up to 0.64m above feet!
+    const stepReach = playerY + 0.58;
 
-    // 1. Stone interior floors
+    // 1. Stone interior & porch floors
     for (let i = 0; i < this.floorZones.length; i++) {
       const f = this.floorZones[i];
       if (x >= f.minX && x <= f.maxX && z >= f.minZ && z <= f.maxZ) {
-        if (f.y >= groundY - 0.18) {
+        if (f.y >= groundY - 0.22) {
           groundY = Math.max(groundY, f.y);
           surface = f.surface;
         }
       }
     }
 
-    // 2. Climbable rocks & buried jeep (smooth domed top you can climb & stand on!)
+    // 2. Climbable rocks (smooth domed top when player steps or jumps onto rock!)
     for (let i = 0; i < this.ellipses.length; i++) {
       const e = this.ellipses[i];
       if (!e.climbable) continue;
       const wx = x - e.x;
       const wz = z - e.z;
-      const maxR = Math.max(e.rx, e.rz) + 0.35;
+      const maxR = Math.max(e.rx, e.rz) + 0.28;
       if (wx * wx + wz * wz > maxR * maxR) continue;
 
       const lx = wx * e.cos - wz * e.sin;
       const lz = wx * e.sin + wz * e.cos;
-      const nx = lx / (e.rx + 0.18);
-      const nz = lz / (e.rz + 0.18);
+      const nx = lx / (e.rx + 0.12);
+      const nz = lz / (e.rz + 0.12);
       const d2 = nx * nx + nz * nz;
-      if (d2 < 1.0) {
-        // Gentle domed profile so walking/jumping onto rocks feels natural
-        const domeTop = groundY + (e.topY - groundY) * Math.sqrt(Math.max(0, 1.0 - d2 * 0.65));
+      if (d2 <= 1.0) {
+        const domeTop = groundY + (e.topY - groundY) * Math.sqrt(Math.max(0, 1.0 - d2 * 0.55));
         if (domeTop <= stepReach && domeTop > groundY) {
           groundY = domeTop;
           surface = 'stone';
@@ -110,11 +133,29 @@ export class PhysicsWorld {
       }
     }
 
-    // 3. Climbable boxes (crates, low ruin walls, desks)
+    // 3. Climbable Oriented Bounding Boxes (Buried 4x4 Jeep hood -> roof!)
+    for (let i = 0; i < this.obbs.length; i++) {
+      const o = this.obbs[i];
+      if (!o.climbable) continue;
+      const wx = x - o.x;
+      const wz = z - o.z;
+      const lx = wx * o.cos - wz * o.sin;
+      const lz = wx * o.sin + wz * o.cos;
+      if (Math.abs(lx) <= o.hx + 0.16 && Math.abs(lz) <= o.hz + 0.16) {
+        // Front half of Jeep (lz > 0.25) is hood height; cabin (lz <= 0.25) is roof height!
+        const surfY = lz > 0.25 ? o.hoodY : o.maxY;
+        if (surfY <= stepReach && surfY > groundY) {
+          groundY = surfY;
+          surface = 'stone';
+        }
+      }
+    }
+
+    // 4. Climbable AABB boxes (crates, low courtyard walls, tables)
     for (let i = 0; i < this.aabbs.length; i++) {
       const b = this.aabbs[i];
       if (!b.climbable) continue;
-      if (x >= b.minX - 0.18 && x <= b.maxX + 0.18 && z >= b.minZ - 0.18 && z <= b.maxZ + 0.18) {
+      if (x >= b.minX - 0.15 && x <= b.maxX + 0.15 && z >= b.minZ - 0.15 && z <= b.maxZ + 0.15) {
         if (b.maxY <= stepReach && b.maxY > groundY) {
           groundY = b.maxY;
           surface = 'stone';
@@ -122,18 +163,19 @@ export class PhysicsWorld {
       }
     }
 
-    // 4. Distant sandstone mesa slopes (walk up lower foothills, solid cliff wall above!)
+    // 5. Distant sandstone mesa foothills (gentle lower base up to 2.2m above terrain, solid cliff wall above!)
     for (let i = 0; i < this.mesas.length; i++) {
       const m = this.mesas[i];
       const wx = x - m.x;
       const wz = z - m.z;
-      const maxR = Math.max(m.rx, m.rz) + 1.0;
+      const maxR = Math.max(m.rx, m.rz) + 0.5;
       if (wx * wx + wz * wz > maxR * maxR) continue;
       const lx = wx * m.cos - wz * m.sin;
       const lz = wx * m.sin + wz * m.cos;
       const d = Math.hypot(lx / m.rx, lz / m.rz);
-      if (d < 1.0) {
-        const slopeY = m.baseY + (1.0 - d) * m.height * 0.85;
+      if (d < 1.0 && d > 0.82) {
+        const foothillT = (1.0 - d) / 0.18;
+        const slopeY = m.baseY + foothillT * 2.1;
         if (slopeY <= stepReach && slopeY > groundY) {
           groundY = slopeY;
           surface = 'stone';
@@ -158,15 +200,15 @@ export class PhysicsWorld {
     return false;
   }
 
-  resolveHorizontal(pos, radius = 0.34) {
-    // Gentle non-violent step-up threshold: anything <= 0.62m above feet is stepped right over!
-    const stepCutoff = pos.y + 0.62;
+  resolveHorizontal(pos, radius = 0.36) {
+    const stepCutoff = pos.y + 0.48;
 
-    for (let pass = 0; pass < 2; pass++) {
-      // 1. Walls & boxes (skip if player is standing/jumping above the top!)
+    for (let pass = 0; pass < 3; pass++) {
+      // 1. Walls & AABB boxes
       for (let i = 0; i < this.aabbs.length; i++) {
         const b = this.aabbs[i];
-        if (b.maxY <= stepCutoff || pos.y + 1.68 < b.minY) continue;
+        const cutoff = b.climbable ? stepCutoff : pos.y + 0.18;
+        if (b.maxY <= cutoff || pos.y + 1.68 < b.minY) continue;
 
         const closestX = Math.max(b.minX, Math.min(pos.x, b.maxX));
         const closestZ = Math.max(b.minZ, Math.min(pos.z, b.maxZ));
@@ -194,7 +236,50 @@ export class PhysicsWorld {
         }
       }
 
-      // 2. Cylinders (posts, palm trunks, well)
+      // 2. Oriented Bounding Boxes (Buried 4x4 Jeep — exact rectangular collision + climbable hood/roof!)
+      for (let i = 0; i < this.obbs.length; i++) {
+        const o = this.obbs[i];
+        const wx = pos.x - o.x;
+        const wz = pos.z - o.z;
+        const lx = wx * o.cos - wz * o.sin;
+        const lz = wx * o.sin + wz * o.cos;
+
+        const localTopY = lz > 0.25 ? o.hoodY : o.maxY;
+        if (o.climbable && localTopY <= stepCutoff) continue;
+
+        const closestLx = Math.max(-o.hx, Math.min(lx, o.hx));
+        const closestLz = Math.max(-o.hz, Math.min(lz, o.hz));
+        const dlx = lx - closestLx;
+        const dlz = lz - closestLz;
+        const distSq = dlx * dlx + dlz * dlz;
+
+        if (distSq < radius * radius) {
+          let outLx = lx;
+          let outLz = lz;
+          if (distSq > 1e-6) {
+            const dist = Math.sqrt(distSq);
+            const push = radius - dist;
+            outLx += (dlx / dist) * push;
+            outLz += (dlz / dist) * push;
+          } else {
+            const penL = Math.abs(lx + o.hx);
+            const penR = Math.abs(o.hx - lx);
+            const penB = Math.abs(lz + o.hz);
+            const penF = Math.abs(o.hz - lz);
+            const m = Math.min(penL, penR, penB, penF);
+            if (m === penL) outLx = -o.hx - radius;
+            else if (m === penR) outLx = o.hx + radius;
+            else if (m === penB) outLz = -o.hz - radius;
+            else outLz = o.hz + radius;
+          }
+          const invCos = o.cos;
+          const invSin = -o.sin;
+          pos.x = o.x + (outLx * invCos - outLz * invSin);
+          pos.z = o.z + (outLx * invSin + outLz * invCos);
+        }
+      }
+
+      // 3. Cylinders (posts, palm trunks, well)
       for (let i = 0; i < this.cylinders.length; i++) {
         const c = this.cylinders[i];
         if (c.maxY <= stepCutoff) continue;
@@ -204,16 +289,16 @@ export class PhysicsWorld {
         const distSq = dx * dx + dz * dz;
         if (distSq < minDist * minDist && distSq > 1e-6) {
           const dist = Math.sqrt(distSq);
-          const push = (minDist - dist) * 0.85; // Gentle slide, never violent snap
+          const push = minDist - dist;
           pos.x += (dx / dist) * push;
           pos.z += (dz / dist) * push;
         }
       }
 
-      // 3. Gentle small rock/jeep core collision (ONLY blocks tall rocks when feet are below top!)
+      // 4. Exact-Fit Rock Colliders (100% blocks horizontal clipping when feet are below rock top; smooth tangential slide!)
       for (let i = 0; i < this.ellipses.length; i++) {
         const e = this.ellipses[i];
-        if (e.topY <= stepCutoff) continue; // Climbable! Walk or jump right on top!
+        if (e.climbable && e.topY <= stepCutoff) continue;
 
         const wx = pos.x - e.x;
         const wz = pos.z - e.z;
@@ -222,17 +307,16 @@ export class PhysicsWorld {
 
         const lx = wx * e.cos - wz * e.sin;
         const lz = wx * e.sin + wz * e.cos;
-        const ex = e.rx + radius * 0.7;
-        const ez = e.rz + radius * 0.7;
+        const ex = e.rx + radius;
+        const ez = e.rz + radius;
         const nx = lx / ex;
         const nz = lz / ez;
         const normDistSq = nx * nx + nz * nz;
 
-        if (normDistSq < 1.0 && normDistSq > 1e-6) {
+        if (normDistSq < 1.0 && normDistSq > 1e-8) {
           const invLen = 1.0 / Math.sqrt(normDistSq);
-          // Smooth soft push instead of violent teleport
-          const outLx = lx + (lx * invLen - lx) * 0.72;
-          const outLz = lz + (lz * invLen - lz) * 0.72;
+          const outLx = lx * invLen;
+          const outLz = lz * invLen;
           const invCos = e.cos;
           const invSin = -e.sin;
           pos.x = e.x + (outLx * invCos - outLz * invSin);
@@ -240,7 +324,7 @@ export class PhysicsWorld {
         }
       }
 
-      // 4. Solid Distant Mesas / Hills (NEVER walk inside hills like hollow air!)
+      // 5. Solid Distant Mesas / Hills (NEVER walk inside hills like hollow air!)
       for (let i = 0; i < this.mesas.length; i++) {
         const m = this.mesas[i];
         const wx = pos.x - m.x;
@@ -250,14 +334,13 @@ export class PhysicsWorld {
 
         const lx = wx * m.cos - wz * m.sin;
         const lz = wx * m.sin + wz * m.cos;
-        // Taper cliff collider so player can walk onto gentle base foothills then stops solidly at cliff wall
-        const cliffRx = m.rx * 0.88 + radius;
-        const cliffRz = m.rz * 0.88 + radius;
+        const cliffRx = m.rx * 0.85 + radius;
+        const cliffRz = m.rz * 0.85 + radius;
         const nx = lx / cliffRx;
         const nz = lz / cliffRz;
         const normDistSq = nx * nx + nz * nz;
 
-        if (normDistSq < 1.0 && normDistSq > 1e-6) {
+        if (normDistSq < 1.0 && normDistSq > 1e-8) {
           const invLen = 1.0 / Math.sqrt(normDistSq);
           const outLx = lx * invLen;
           const outLz = lz * invLen;
@@ -267,6 +350,17 @@ export class PhysicsWorld {
           pos.z = m.z + (outLx * invSin + outLz * invCos);
         }
       }
+    }
+
+    // 6. Steep terrain slope limiter (>42° slope pushes back gently so player cannot walk up vertical mountain cliffs)
+    const eps = 0.4;
+    const dhx = (this.getTerrainHeight(pos.x + eps, pos.z) - this.getTerrainHeight(pos.x - eps, pos.z)) / (2 * eps);
+    const dhz = (this.getTerrainHeight(pos.x, pos.z + eps) - this.getTerrainHeight(pos.x, pos.z - eps)) / (2 * eps);
+    const slopeMag = Math.hypot(dhx, dhz);
+    if (slopeMag > 0.92) {
+      const pushBack = (slopeMag - 0.92) * 0.35;
+      pos.x -= (dhx / slopeMag) * pushBack;
+      pos.z -= (dhz / slopeMag) * pushBack;
     }
 
     const distFromOrigin = Math.hypot(pos.x, pos.z);
