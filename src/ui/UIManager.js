@@ -178,6 +178,14 @@ export class UIManager {
       });
     });
 
+    const fpsCapGroup = document.getElementById('opt-fpscap');
+    fpsCapGroup?.querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.settings.set('fpsCap', Number(btn.dataset.val));
+        this._syncSettingsUI();
+      });
+    });
+
     const bindRange = (id, key, valId, fmt) => {
       const el = document.getElementById(id);
       const out = document.getElementById(valId);
@@ -198,8 +206,10 @@ export class UIManager {
       el?.addEventListener('change', () => {
         this.settings.set(key, el.checked);
         if (key === 'showFps') this._updateFpsVisibility();
+        if (key === 'batterySaver') this._syncSettingsUI();
       });
     };
+    bindToggle('opt-battery', 'batterySaver');
     bindToggle('opt-shadows', 'shadows');
     bindToggle('opt-sunflare', 'sunFlare');
     bindToggle('opt-storm', 'dustStorm');
@@ -210,6 +220,9 @@ export class UIManager {
     const d = this.settings.data;
     document.querySelectorAll('#opt-quality button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.val === d.quality);
+    });
+    document.querySelectorAll('#opt-fpscap button').forEach((btn) => {
+      btn.classList.toggle('active', Number(btn.dataset.val) === Number(d.fpsCap));
     });
     const setVal = (id, val, outId, fmt) => {
       const el = document.getElementById(id);
@@ -226,6 +239,7 @@ export class UIManager {
       const el = document.getElementById(id);
       if (el) el.checked = Boolean(val);
     };
+    setChk('opt-battery', d.batterySaver);
     setChk('opt-shadows', d.shadows);
     setChk('opt-sunflare', d.sunFlare);
     setChk('opt-storm', d.dustStorm);
@@ -241,6 +255,10 @@ export class UIManager {
     if (this._portraitDismissed || !this.portraitWarning) return;
     const isNarrowPortrait = window.innerHeight > window.innerWidth && window.innerWidth < 680;
     this.portraitWarning.classList.toggle('hidden', !isNarrowPortrait);
+  }
+
+  isGateActive() {
+    return Boolean(this.fullscreenGate && !this.fullscreenGate.classList.contains('hidden'));
   }
 
   dismissGateForDebug() {
@@ -305,30 +323,55 @@ export class UIManager {
     }
     if (this.missionArrowEl) {
       if (arrowDeg !== null && Number.isFinite(arrowDeg)) {
-        this.missionArrowEl.style.transform = `rotate(${arrowDeg.toFixed(1)}deg)`;
-        this.missionArrowEl.classList.remove('hidden');
-      } else {
+        const rounded = Math.round(arrowDeg);
+        if (rounded !== this._lastArrowDeg) {
+          this._lastArrowDeg = rounded;
+          this.missionArrowEl.style.transform = `rotate(${rounded}deg)`;
+        }
+        if (this._arrowHidden !== false) {
+          this._arrowHidden = false;
+          this.missionArrowEl.classList.remove('hidden');
+        }
+      } else if (this._arrowHidden !== true) {
+        this._arrowHidden = true;
         this.missionArrowEl.classList.add('hidden');
       }
     }
     if (this.missionDistEl) {
       if (distText) {
-        this.missionDistEl.textContent = distText;
-        this.missionDistEl.classList.remove('hidden');
-      } else {
+        if (this._lastDistText !== distText) {
+          this._lastDistText = distText;
+          this.missionDistEl.textContent = distText;
+        }
+        if (this._distHidden !== false) {
+          this._distHidden = false;
+          this.missionDistEl.classList.remove('hidden');
+        }
+      } else if (this._distHidden !== true) {
+        this._distHidden = true;
         this.missionDistEl.classList.add('hidden');
       }
     }
   }
 
   updateClock(clockText, timeOfDay) {
-    if (this.clockEl) this.clockEl.textContent = clockText;
+    if (this.clockEl && this._lastClockText !== clockText) {
+      this._lastClockText = clockText;
+      this.clockEl.textContent = clockText;
+    }
     if (this.sunIconEl) {
-      this.sunIconEl.style.color = timeOfDay > 0.65 ? '#ff9d42' : '#ffe08a';
+      const col = timeOfDay > 0.65 ? '#ff9d42' : '#ffe08a';
+      if (this._lastSunColor !== col) {
+        this._lastSunColor = col;
+        this.sunIconEl.style.color = col;
+      }
     }
   }
 
   updateInteractPrompt(interactable) {
+    const id = interactable ? interactable.id : null;
+    if (id === this._lastInteractId) return;
+    this._lastInteractId = id;
     if (!interactable) {
       this.reticleDot?.classList.remove('interactive');
       this.mobileInteractBtn?.classList.add('hidden');

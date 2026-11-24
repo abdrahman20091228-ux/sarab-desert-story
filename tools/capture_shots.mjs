@@ -129,12 +129,27 @@ async function main() {
     const statsAsr = await page.evaluate(() => window.__SARAB__.getStats());
     console.log('Shot 5 (True Asr):', JSON.stringify(statsAsr));
 
-    // Automated Physics Verification
+    // Automated Physics Verification (Rocks 16-angle + ALL 7 Mesas x 36 angles = 252 checks + Jeep Climb!)
     const rockTest = await page.evaluate(() => window.__SARAB__.testRockCollision());
+    const mesaTest = await page.evaluate(() => window.__SARAB__.testMesaCollision());
     const jeepTest = await page.evaluate(() => window.__SARAB__.testJeepClimb());
+
+    // Stationary Shadow Leak Check: wait 6 frames without moving -> shadowUpdates MUST stay 0!
+    const shadBefore = (await page.evaluate(() => window.__SARAB__.getStats())).shadowUpdates;
+    await waitFrames(page, 6);
+    const shadAfter = (await page.evaluate(() => window.__SARAB__.getStats())).shadowUpdates;
+    const steadyStats = await page.evaluate(() => window.__SARAB__.getStats());
+
     console.log('Rock 16-Angle Collision Test:', JSON.stringify(rockTest));
+    console.log('Mesa 7x36=252 Collision Test:', JSON.stringify(mesaTest));
     console.log('Jeep Climb Test:', JSON.stringify(jeepTest));
+    console.log('Stationary Shadow Redraws over 6 frames (Target = 0):', shadAfter - shadBefore);
+    console.log('Steady-State Draw Calls (No Shadow Pass):', steadyStats.drawCalls);
     console.log('Storm Draw Call Delta (Storm - Asr):', statsStorm.drawCalls - statsAsr.drawCalls);
+
+    if (!mesaTest.allMesasSolid) errors.push(`Mesa collision failed: ${JSON.stringify(mesaTest)}`);
+    if (!rockTest.rockBlockedCleanly) errors.push(`Rock collision failed: ${JSON.stringify(rockTest)}`);
+    if (shadAfter - shadBefore > 0) errors.push(`Shadow leak detected: ${shadAfter - shadBefore} redraws while stationary`);
 
     // Close desktop WebGL context before launching mobile context so SwiftShader runs fast!
     await page.close();
@@ -163,9 +178,10 @@ async function main() {
       window.__SARAB__.teleport(-14.8, 6.2, -0.52, 0.04, true);
       window.__SARAB__.setMission(4);
     });
-    await waitFrames(mPage, 3);
+    await waitFrames(mPage, 4);
     await mPage.screenshot({ path: path.join(OUT_DIR, '06_v4_mobile_asr.png') });
-    console.log('Shot 6 (Mobile Asr):', JSON.stringify(await mPage.evaluate(() => window.__SARAB__.getStats())));
+    const mobileStats = await mPage.evaluate(() => window.__SARAB__.getStats());
+    console.log('Shot 6 (Mobile Asr + SkyCache):', JSON.stringify(mobileStats));
 
     await browser.close();
   } finally {

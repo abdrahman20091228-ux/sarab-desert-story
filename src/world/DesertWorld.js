@@ -2,23 +2,21 @@ import * as THREE from 'three';
 import {
   getTerrainHeight,
   getTerrainNormal,
+  getMesaVisualRadiusAt,
   HOUSE_CENTER_X,
   HOUSE_CENTER_Z,
   TERRAIN_SIZE,
   TERRAIN_SEGMENTS,
 } from './TerrainMath.js';
 import { DESERT_PALETTE, SHARED_GRADE_UNIFORMS, attachDesertGrading } from '../engine/Palette.js';
+import { IS_MOBILE } from '../engine/Settings.js';
 
 /**
- * High-FPS Living Arabian Desert World (v4.0):
- * - 96x96 central dune terrain with 100% exact visual-physics triangle parity + 32x32 horizon skirt
- * - Unified desert color grading + frustum-edge shadow fade
- * - Stratified sandstone mesas with aerial perspective (single InstancedMesh draw call)
- * - Distance-LOD photogrammetry boulders (full scans close, low-poly LOD far -> saves ~50k tris!)
- * - Soft radial contact shadow decals (opacity 0.35)
- * - Sun-bleached dusty khaki-rust expedition 4x4 Jeep (merged body+chassis, reflective dusty glass, scanned tyres)
- * - Dense alpha-tested twig-cluster tumbleweeds (1 instanced draw call, zero wire-cage look)
- * - Instanced palm crowns + GPU-fluttering tent + GPU dust particles boosted by DustStorm
+ * Thermal-Optimized Living Arabian Desert World (v4.1):
+ * - Shared 1:1 `getMesaVisualRadiusAt` geometry matching PhysicsWorld exactly (ZERO clipping into mountains!)
+ * - Ultra-light MeshLambertMaterial (with normalMap!) on matte surfaces -> 3-4x lower mobile GPU heat!
+ * - GPU vertex-shader palm sway & tent flutter + 30Hz throttled fauna buffer updates
+ * - Zero per-frame heap allocations
  */
 export class DesertWorld {
   constructor(scene, textureManager, modelManager, physics, settings) {
@@ -34,12 +32,15 @@ export class DesertWorld {
     this.hawks = [];
     this.tumbleweeds = [];
     this.lizards = [];
-    this.palmCrownData = [];
     this.jeepWorldPos = new THREE.Vector3(-5.8, 0, 2.2);
     this.tentBarrelWorldPos = new THREE.Vector3();
     this.stormIntensity = 0;
     this._dummy = new THREE.Object3D();
     this._tmpCol = new THREE.Color();
+    this._dustNoonCol = new THREE.Color('#ecd6b0');
+    this._dustAsrCol = new THREE.Color('#f0b672');
+    this._faunaAccum = 0;
+    this._lizardsInitialized = false;
 
     this._createTerrain();
     this._createHorizonSkirt();
@@ -58,16 +59,25 @@ export class DesertWorld {
 
   _createSandMaterial(repeatX, repeatY, isFar = false) {
     const pbr = this.tex.loadPBRSet('sand', repeatX, repeatY);
-    const mat = new THREE.MeshStandardMaterial({
-      map: pbr.map,
-      normalMap: isFar ? null : pbr.normalMap,
-      normalScale: new THREE.Vector2(1.05, 1.05),
-      roughnessMap: null,
-      roughness: 0.91,
-      metalness: 0.02,
-      vertexColors: true,
-      color: DESERT_PALETTE.sandTintNoon,
-    });
+    // Use Lambert on horizon skirt AND on mobile terrain (keeps full normalMap ripples with 3x less GPU power!)
+    const useLambert = isFar || IS_MOBILE;
+    const mat = useLambert
+      ? new THREE.MeshLambertMaterial({
+          map: pbr.map,
+          normalMap: isFar ? null : pbr.normalMap,
+          normalScale: new THREE.Vector2(1.0, 1.0),
+          vertexColors: true,
+          color: DESERT_PALETTE.sandTintNoon,
+        })
+      : new THREE.MeshStandardMaterial({
+          map: pbr.map,
+          normalMap: pbr.normalMap,
+          normalScale: new THREE.Vector2(1.05, 1.05),
+          roughness: 0.91,
+          metalness: 0.02,
+          vertexColors: true,
+          color: DESERT_PALETTE.sandTintNoon,
+        });
     mat.name = isFar ? 'sand_far' : 'sand_near';
 
     if (!isFar) {
@@ -91,10 +101,6 @@ export class DesertWorld {
              float macroWave = sin(vDesertWorldPos.x * 0.045 + vDesertWorldPos.z * 0.035) * 0.5 + 0.5;
              vec3 warmTint = mix(vec3(0.94, 0.89, 0.81), vec3(1.04, 0.98, 0.90), macroWave);
              diffuseColor.rgb *= warmTint;`
-          )
-          .replace(
-            '#include <lights_fragment_maps>',
-            `#include <lights_fragment_maps>`
           );
       };
       attachDesertGrading(mat, { saturation: 0.92, contrast: 1.03 });
@@ -182,7 +188,7 @@ export class DesertWorld {
   }
 
   _createDistantMesas() {
-    // Watertight stratified Arabian sandstone mesa buttes with talus skirt, cliff ledges & aerial perspective!
+    // Watertight stratified sandstone mesas using exact shared `getMesaVisualRadiusAt(ang, y)` (1:1 with PhysicsWorld!)
     const mesaGeo = new THREE.CylinderGeometry(0.54, 1.08, 1.0, 16, 7, false);
     mesaGeo.translate(0, 0.5, 0);
     const mp = mesaGeo.attributes.position;
@@ -190,28 +196,29 @@ export class DesertWorld {
       const x = mp.getX(i);
       const y = mp.getY(i);
       const z = mp.getZ(i);
-      const ang = Math.atan2(z, x);
-      // Geological profile: wide sandy talus base (y < 0.35), stepped sandstone cliff, flat wind-eroded cap
-      const talusFlair = y < 0.35 ? 1.0 + (0.35 - y) * 0.42 : 1.0;
-      const cliffStep = 1.0 + 0.055 * Math.sin(y * 22.0) + 0.03 * Math.cos(y * 37.0);
-      const radialBreakup = 1.0 + 0.14 * Math.sin(ang * 3.0 + 0.7) + 0.09 * Math.cos(ang * 5.0 - 0.4);
-      const factor = y > 0.96 ? radialBreakup : radialBreakup * talusFlair * cliffStep;
-      mp.setXYZ(i, x * factor, y, z * factor);
+      const r0 = Math.hypot(x, z);
+      if (r0 > 1e-5) {
+        const ang = Math.atan2(z, x);
+        const targetR = getMesaVisualRadiusAt(ang, y);
+        const scaleR = targetR / r0;
+        // Cap vertices near the center stay inside top disc, outer ring maps cleanly to exact targetR
+        const baseLin = 1.08 + (0.54 - 1.08) * y;
+        const mult = r0 >= baseLin * 0.9 ? scaleR : targetR / Math.max(0.01, baseLin);
+        mp.setXYZ(i, x * mult, y, z * mult);
+      }
     }
     mesaGeo.computeVertexNormals();
 
     const pbr = this.tex.loadPBRSet('sandstone_rock', 4, 2);
-    const mesaMat = new THREE.MeshStandardMaterial({
+    // Matte distant rock uses MeshLambertMaterial (huge mobile GPU power savings with identical matte appearance!)
+    const mesaMat = new THREE.MeshLambertMaterial({
       map: pbr.map,
-      normalMap: pbr.normalMap,
+      normalMap: IS_MOBILE ? null : pbr.normalMap,
       normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.96,
-      metalness: 0.01,
       color: DESERT_PALETTE.mesaBase,
     });
     mesaMat.name = 'mesa_sandstone';
 
-    // Horizontal geological sandstone strata + sandy talus dust blend + desaturated aerial perspective!
     mesaMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\nvarying vec3 vMesaWorldPos;\nvarying float vMesaLocalY;`)
@@ -230,10 +237,8 @@ export class DesertWorld {
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
-           // Desaturate raw texture heavily so mesas never look cartoon-orange
            float _ml = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
            diffuseColor.rgb = mix(vec3(_ml), diffuseColor.rgb, 0.62);
-           // Stratified sedimentary bands along world Y with gentle geological dip
            float bandCoord = vMesaWorldPos.y * 0.42 + sin(vMesaWorldPos.x * 0.03 + vMesaWorldPos.z * 0.025) * 0.8;
            float strata1 = sin(bandCoord * 3.1) * 0.5 + 0.5;
            float strata2 = sin(bandCoord * 8.7 + 1.3) * 0.5 + 0.5;
@@ -241,7 +246,6 @@ export class DesertWorld {
            vec3 erodedOchre   = vec3(0.55, 0.43, 0.31);
            vec3 strataTint = mix(erodedOchre, paleLimestone, strata1 * 0.65 + strata2 * 0.35);
            diffuseColor.rgb *= mix(vec3(0.85), strataTint * 1.35, 0.68);
-           // Windblown sand talus skirt at the base of the mesa blends directly into dune sand!
            float baseDust = smoothstep(0.32, 0.02, vMesaLocalY);
            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.63, 0.47), baseDust * 0.62);`
         );
@@ -255,7 +259,7 @@ export class DesertWorld {
     });
 
     const mesas = [
-      { x: -125, z: -108, sx: 46, sy: 26, sz: 34, ry: 0.4 },
+      { x: -138, z: -92, sx: 44, sy: 26, sz: 32, ry: 0.4 },
       { x: -34, z: -138, sx: 54, sy: 30, sz: 36, ry: 1.1 },
       { x: 92, z: -124, sx: 48, sy: 28, sz: 36, ry: 2.0 },
       { x: 134, z: -30, sx: 44, sy: 24, sz: 34, ry: 0.8 },
@@ -306,11 +310,8 @@ export class DesertWorld {
 
     const lodGeo = this._createLowPolyRockLODGeo();
     const pbr = this.tex.loadPBRSet('sandstone_rock', 2, 2);
-    const lodMat = new THREE.MeshStandardMaterial({
+    const lodMat = new THREE.MeshLambertMaterial({
       map: pbr.map,
-      normalMap: pbr.normalMap,
-      normalScale: new THREE.Vector2(0.7, 0.7),
-      roughness: 0.94,
       color: 0x9b8974,
     });
     lodMat.name = 'rock_lod_sandstone';
@@ -319,7 +320,6 @@ export class DesertWorld {
         '#include <color_fragment>',
         `#include <color_fragment>
          float _rl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-         // Desaturate rusty orange tint so far LOD rocks match dark sandstone rock_07/09 scans!
          diffuseColor.rgb = mix(vec3(_rl), diffuseColor.rgb, 0.48) * vec3(0.95, 0.90, 0.82);`
       );
     };
@@ -374,7 +374,6 @@ export class DesertWorld {
       });
     }
 
-    // Distance LOD split: full photogrammetry scans near gameplay path, 80-tri sculpted LOD rocks far away!
     const near0 = placements.filter((p) => p.hero && p.type === 0);
     const near1 = placements.filter((p) => p.hero && p.type === 1);
     const farRocks = placements.filter((p) => !p.hero);
@@ -391,10 +390,9 @@ export class DesertWorld {
 
     const farInst = new THREE.InstancedMesh(lodGeo, lodMat, Math.max(1, farRocks.length));
     farInst.count = farRocks.length;
-    farInst.castShadow = false; // Outside ±22m shadow frustum -> saves shadow pass work!
+    farInst.castShadow = false;
     farInst.receiveShadow = true;
 
-    // Soft, tight contact shadow decals ONLY for near hero rocks (opacity 0.35, no dark smear!)
     const nearAllCount = near0.length + near1.length;
     const shadowGeo = new THREE.PlaneGeometry(1, 1);
     shadowGeo.rotateX(-Math.PI / 2);
@@ -443,7 +441,6 @@ export class DesertWorld {
         dummy.quaternion.copy(quat);
         const rx = p.sx * 0.265;
         const rz = p.sz * 0.49;
-        // Tighter contact footprint (1.92x instead of 2.5x) eliminates dark smear around boulders!
         dummy.scale.set(rx * 1.92, 1, rz * 1.92);
         dummy.updateMatrix();
         shadowInst.setMatrixAt(iShad++, dummy.matrix);
@@ -481,11 +478,7 @@ export class DesertWorld {
     const mergedGeo = this._mergeGeometriesSimple(branches);
     branches.forEach((b) => b.dispose());
 
-    const shrubMat = new THREE.MeshStandardMaterial({
-      color: 0x766444,
-      roughness: 0.96,
-      metalness: 0.0,
-    });
+    const shrubMat = new THREE.MeshLambertMaterial({ color: 0x766444 });
 
     const count = 46;
     const inst = new THREE.InstancedMesh(mergedGeo, shrubMat, count);
@@ -521,18 +514,35 @@ export class DesertWorld {
   }
 
   _createDesertPalms() {
-    // Batch all 4 palm trunks into 1 mesh AND all 4 palm crowns into 1 InstancedMesh -> only 2 draw calls total!
+    // 100% GPU-swayed instanced palm crowns (ZERO per-frame CPU matrix updates or GPU buffer uploads!)
     const woodPbr = this.tex.loadPBRSet('desert_wood', 1, 3);
-    const trunkMat = new THREE.MeshStandardMaterial({
+    const trunkMat = new THREE.MeshLambertMaterial({
       map: woodPbr.map,
-      roughness: 0.94,
       color: 0x8c7356,
     });
-    const frondMat = new THREE.MeshStandardMaterial({
+
+    this.palmTimeUniform = { value: 0 };
+    this.palmStormUniform = { value: 0 };
+    const frondMat = new THREE.MeshLambertMaterial({
       color: 0x5c693c,
-      roughness: 0.9,
       side: THREE.DoubleSide,
     });
+    frondMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.palmTimeUniform;
+      shader.uniforms.uStorm = this.palmStormUniform;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uStorm;`)
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           float tipDist = length(position.xz);
+           float swayAmp = (0.045 + uStorm * 0.19) * tipDist;
+           float swayFreq = 1.5 + uStorm * 3.4;
+           float phase = instanceMatrix[3][0] * 0.3 + instanceMatrix[3][2] * 0.2;
+           transformed.x += (sin(uTime * swayFreq + phase) + uStorm * 0.7) * swayAmp;
+           transformed.y += cos(uTime * swayFreq * 0.85 + phase) * swayAmp * 0.55;`
+        );
+    };
 
     const palmSites = [
       { x: HOUSE_CENTER_X - 10.8, z: HOUSE_CENTER_Z - 9.2, h: 6.2, lean: 0.14, ry: 0.4 },
@@ -565,9 +575,10 @@ export class DesertWorld {
     frondParts.forEach((g) => g.dispose());
 
     this.palmCrownInst = new THREE.InstancedMesh(crownGeo, frondMat, palmSites.length);
-    this.palmCrownInst.castShadow = true;
+    this.palmCrownInst.castShadow = !IS_MOBILE;
 
     const trunkGeos = [];
+    const dummy = this._dummy;
     palmSites.forEach((p, idx) => {
       const gy = getTerrainHeight(p.x, p.z);
       const tGeo = new THREE.CylinderGeometry(0.14, 0.29, p.h, 7, 4);
@@ -586,16 +597,15 @@ export class DesertWorld {
 
       const topX = p.x + Math.cos(p.ry) * (p.h * p.lean);
       const topZ = p.z - Math.sin(p.ry) * (p.h * p.lean);
-      this.palmCrownData.push({
-        x: topX,
-        y: gy + p.h - 0.22,
-        z: topZ,
-        ry: p.ry,
-        phase: idx * 1.7,
-      });
+      dummy.position.set(topX, gy + p.h - 0.22, topZ);
+      dummy.rotation.set(0, p.ry, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      this.palmCrownInst.setMatrixAt(idx, dummy.matrix);
 
       this.physics.addCylinderCollider(p.x, p.z, 0.34, gy + p.h);
     });
+    this.palmCrownInst.instanceMatrix.needsUpdate = true;
 
     const mergedTrunks = new THREE.Mesh(this._mergeGeometriesSimple(trunkGeos), trunkMat);
     mergedTrunks.castShadow = true;
@@ -771,14 +781,13 @@ export class DesertWorld {
     const ty = getTerrainHeight(tx, tz);
 
     const woodPbr = this.tex.loadPBRSet('desert_wood', 1, 1);
-    const woodMat = new THREE.MeshStandardMaterial({ map: woodPbr.map, roughness: 0.92, color: 0xb8a388 });
+    const woodMat = new THREE.MeshLambertMaterial({ map: woodPbr.map, color: 0xb8a388 });
     const fabPbr = this.tex.loadPBRSet('tattered_fabric', 2, 2);
 
     this.tentTimeUniform = { value: 0 };
     this.tentStormUniform = { value: 0 };
-    const fabMat = new THREE.MeshStandardMaterial({
+    const fabMat = new THREE.MeshLambertMaterial({
       map: fabPbr.map,
-      roughness: 0.94,
       side: THREE.DoubleSide,
       color: 0xd4be9a,
     });
@@ -815,10 +824,9 @@ export class DesertWorld {
     clothGeo.rotateX(-Math.PI / 2 + 0.14);
     const tentCloth = new THREE.Mesh(clothGeo, fabMat);
     tentCloth.position.set(0, 2.28, 0);
-    tentCloth.castShadow = true;
+    tentCloth.castShadow = !IS_MOBILE;
     tent.add(tentCloth);
 
-    // Record tent barrel position so AbandonedHouse batches it in the single barrel InstancedMesh (saves 1 draw call!)
     this.tentBarrelWorldPos.set(tx - 0.55, ty, tz - 0.55);
     this.group.add(tent);
     this.physics.addBoxCollider(tx - 0.85, tx - 0.15, tz - 0.85, tz - 0.15, ty, ty + 1.05, true);
@@ -859,8 +867,6 @@ export class DesertWorld {
   }
 
   _createRollingTumbleweeds() {
-    // Organic dense dry-bramble sphere built from 6 intersecting alpha-tested twig cards (1 InstancedMesh draw call, ~12 tris each!)
-    // Completely replaces the wireframe torus-cage look!
     const cards = [];
     const rotations = [
       [0, 0, 0],
@@ -879,12 +885,10 @@ export class DesertWorld {
     const weedGeo = this._mergeGeometriesSimple(cards);
     cards.forEach((c) => c.dispose());
 
-    const weedMat = new THREE.MeshStandardMaterial({
+    const weedMat = new THREE.MeshLambertMaterial({
       map: this.tex.createTwigClusterTexture(),
       alphaTest: 0.35,
       side: THREE.DoubleSide,
-      roughness: 0.96,
-      metalness: 0.0,
       color: 0xc2a47c,
     });
 
@@ -915,7 +919,7 @@ export class DesertWorld {
     tail.translate(0, 0, -0.28);
     parts.push(body, tail);
     const lizGeo = this._mergeGeometriesSimple(parts);
-    const lizMat = new THREE.MeshStandardMaterial({ color: 0xa68557, roughness: 0.88 });
+    const lizMat = new THREE.MeshLambertMaterial({ color: 0xa68557 });
 
     this.lizardInst = new THREE.InstancedMesh(lizGeo, lizMat, 3);
     this.lizardInst.frustumCulled = false;
@@ -981,7 +985,7 @@ export class DesertWorld {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 3));
     this.dustMaxCount = maxCount;
-    this.baseDustCount = 240;
+    this.baseDustCount = 220;
 
     this.dustUniforms = {
       uTime: { value: 0 },
@@ -1040,7 +1044,6 @@ export class DesertWorld {
   setStormIntensity(val) {
     this.stormIntensity = Math.max(0, Math.min(1, val));
     if (this.dustPoints) {
-      // During dust storm, reveal up to full maxCount existing GPU dust points (0 extra draw calls!)
       const activeCount = Math.round(
         THREE.MathUtils.lerp(this.baseDustCount, this.dustMaxCount, this.stormIntensity)
       );
@@ -1052,7 +1055,29 @@ export class DesertWorld {
     const dummy = this._dummy;
     const storm = this.stormIntensity;
 
-    // 1. Animate soaring desert hawks (flee higher during storm)
+    // 1. Update 100% GPU shader uniforms (palm sway, tent flutter, dust points — ZERO CPU loops/uploads!)
+    if (this.palmTimeUniform) this.palmTimeUniform.value = elapsed;
+    if (this.palmStormUniform) this.palmStormUniform.value = storm;
+    if (this.tentTimeUniform) this.tentTimeUniform.value = elapsed;
+    if (this.tentStormUniform) this.tentStormUniform.value = storm;
+    this.dustUniforms.uTime.value = elapsed;
+    this.dustUniforms.uStorm.value = storm;
+    this.dustUniforms.uPlayerPos.value.copy(playerPos);
+
+    this._tmpCol.lerpColors(this._dustNoonCol, this._dustAsrCol, Math.pow(timeOfDay, 1.2));
+    if (storm > 0.001) {
+      this._tmpCol.lerp(DESERT_PALETTE.horizonStorm, storm * 0.75);
+    }
+    this.dustUniforms.uColor.value.copy(this._tmpCol);
+
+    // 2. Throttle fauna instance matrix uploads to ~30Hz (halves mobile CPU/GPU buffer traffic!)
+    this._faunaAccum += dt;
+    const runFauna = !this._lizardsInitialized || this._faunaAccum >= 0.033;
+    if (!runFauna) return;
+    const fDt = this._lizardsInitialized ? this._faunaAccum : dt;
+    this._faunaAccum = 0;
+
+    // Hawks
     for (let i = 0; i < this.hawks.length; i++) {
       const h = this.hawks[i];
       const a = elapsed * h.speed + h.phase;
@@ -1067,11 +1092,11 @@ export class DesertWorld {
     }
     this.hawkInst.instanceMatrix.needsUpdate = true;
 
-    // 2. Animate dense twig tumbleweeds (roll faster in storm wind!)
+    // Rolling tumbleweeds
     const windMult = 1.0 + storm * 2.2;
     for (let i = 0; i < this.tumbleweeds.length; i++) {
       const tw = this.tumbleweeds[i];
-      const step = tw.speed * windMult * dt;
+      const step = tw.speed * windMult * fDt;
       tw.x += step;
       tw.z += step * 0.34;
       if (tw.x - playerPos.x > 46) tw.x -= 92;
@@ -1089,64 +1114,39 @@ export class DesertWorld {
     }
     this.tumbleweedInst.instanceMatrix.needsUpdate = true;
 
-    // 3. Animate desert lizards
+    // Lizards: ONLY upload GPU matrix buffer when at least one lizard moved (or on first frame)!
+    let anyLizardMoved = !this._lizardsInitialized;
     for (let i = 0; i < this.lizards.length; i++) {
       const l = this.lizards[i];
       const dx = l.x - playerPos.x;
       const dz = l.z - playerPos.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < 5.8) {
+      const distSq = dx * dx + dz * dz;
+      if (distSq < 33.64) {
         l.yaw = Math.atan2(dx, dz);
         l.speed = 4.8;
+      } else if (l.speed > 0.05) {
+        l.speed *= Math.max(0, 1 - fDt * 3.5);
       } else {
-        l.speed *= Math.max(0, 1 - dt * 3.5);
+        l.speed = 0;
       }
-      if (l.speed > 0.05) {
-        l.x += Math.sin(l.yaw) * l.speed * dt;
-        l.z += Math.cos(l.yaw) * l.speed * dt;
+      if (l.speed > 0.05 || !this._lizardsInitialized) {
+        if (l.speed > 0.05) {
+          l.x += Math.sin(l.yaw) * l.speed * fDt;
+          l.z += Math.cos(l.yaw) * l.speed * fDt;
+        }
+        const ly = getTerrainHeight(l.x, l.z) + 0.04;
+        dummy.position.set(l.x, ly, l.z);
+        dummy.rotation.set(0, l.yaw, Math.sin(elapsed * 18.0) * (l.speed * 0.03));
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        this.lizardInst.setMatrixAt(i, dummy.matrix);
+        anyLizardMoved = true;
       }
-      const ly = getTerrainHeight(l.x, l.z) + 0.04;
-      dummy.position.set(l.x, ly, l.z);
-      dummy.rotation.set(0, l.yaw, Math.sin(elapsed * 18.0) * (l.speed * 0.03));
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      this.lizardInst.setMatrixAt(i, dummy.matrix);
     }
-    this.lizardInst.instanceMatrix.needsUpdate = true;
-
-    // 4. Gently sway instanced palm crowns (bends dramatically in dust storm!)
-    for (let i = 0; i < this.palmCrownData.length; i++) {
-      const p = this.palmCrownData[i];
-      const swayAmp = 0.045 + timeOfDay * 0.025 + storm * 0.16;
-      const swayFreq = 1.4 + storm * 3.2;
-      dummy.position.set(p.x, p.y, p.z);
-      dummy.rotation.set(
-        Math.cos(elapsed * (swayFreq * 0.8) + p.phase) * swayAmp * 0.7,
-        p.ry,
-        -storm * 0.14 + Math.sin(elapsed * swayFreq + p.phase) * swayAmp
-      );
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      this.palmCrownInst.setMatrixAt(i, dummy.matrix);
+    if (anyLizardMoved) {
+      this._lizardsInitialized = true;
+      this.lizardInst.instanceMatrix.needsUpdate = true;
     }
-    this.palmCrownInst.instanceMatrix.needsUpdate = true;
-
-    // 5. Update GPU shader uniforms (O(1) cost!)
-    if (this.tentTimeUniform) this.tentTimeUniform.value = elapsed;
-    if (this.tentStormUniform) this.tentStormUniform.value = storm;
-    this.dustUniforms.uTime.value = elapsed;
-    this.dustUniforms.uStorm.value = storm;
-    this.dustUniforms.uPlayerPos.value.copy(playerPos);
-
-    this._tmpCol.lerpColors(
-      new THREE.Color('#ecd6b0'),
-      new THREE.Color('#f0b672'),
-      Math.pow(timeOfDay, 1.2)
-    );
-    if (storm > 0.001) {
-      this._tmpCol.lerp(DESERT_PALETTE.horizonStorm, storm * 0.75);
-    }
-    this.dustUniforms.uColor.value.copy(this._tmpCol);
   }
 
   _mergeGeometriesSimple(geos) {

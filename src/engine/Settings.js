@@ -1,9 +1,11 @@
 /**
- * Graphics, Controls & Audio settings tuned for locked 60FPS on both mobile & desktop (v4.0).
- * Automatically detects touch/mobile devices to pick a high-FPS default preset!
+ * Thermal-Aware Graphics, Controls & Audio Settings (v4.1):
+ * - Prevents mobile overheating by capping FPS (45 FPS default on mobile, 30 FPS in Battery/Cool Mode),
+ *   enabling procedural sky texture caching (-95% sky GPU power), disabling heavy PMREM IBL on matte mobile presets,
+ *   and keeping mobile DPR tightly bounded.
  */
 
-const STORAGE_KEY = 'sarab_settings_v4';
+const STORAGE_KEY = 'sarab_settings_v41';
 
 export const IS_MOBILE =
   typeof window !== 'undefined' &&
@@ -13,38 +15,44 @@ export const IS_MOBILE =
 export const QUALITY_PRESETS = {
   low: {
     label: 'منخفض',
-    dprCap: 0.8,
+    dprCap: 0.85,
     shadowMapSize: 512,
     shadows: false,
-    dustCount: 90,
-    stormStreaks: 120,
+    dustCount: 65,
+    stormStreaks: 95,
     cloudOctaves: 2,
+    useSkyCache: true,
+    useIBL: false,
     anisotropy: 1,
-    sunFlare: true,
-    resolutionScale: 0.78,
+    sunFlare: false,
+    resolutionScale: 0.85,
     sandSparkle: false,
   },
   medium: {
     label: 'متوسط',
     dprCap: 1.05,
-    shadowMapSize: 1024,
+    shadowMapSize: 512,
     shadows: true,
-    dustCount: 160,
-    stormStreaks: 200,
+    dustCount: 110,
+    stormStreaks: 150,
     cloudOctaves: 3,
+    useSkyCache: IS_MOBILE,
+    useIBL: !IS_MOBILE,
     anisotropy: 2,
     sunFlare: true,
-    resolutionScale: 0.9,
+    resolutionScale: 0.95,
     sandSparkle: false,
   },
   high: {
     label: 'عالي',
     dprCap: 1.35,
-    shadowMapSize: 2048,
+    shadowMapSize: IS_MOBILE ? 1024 : 2048,
     shadows: true,
-    dustCount: 240,
-    stormStreaks: 280,
+    dustCount: 220,
+    stormStreaks: 260,
     cloudOctaves: 4,
+    useSkyCache: IS_MOBILE,
+    useIBL: true,
     anisotropy: 4,
     sunFlare: true,
     resolutionScale: 1.0,
@@ -55,9 +63,11 @@ export const QUALITY_PRESETS = {
     dprCap: 1.7,
     shadowMapSize: 2048,
     shadows: true,
-    dustCount: 320,
+    dustCount: 300,
     stormStreaks: 300,
     cloudOctaves: 5,
+    useSkyCache: false,
+    useIBL: true,
     anisotropy: 8,
     sunFlare: true,
     resolutionScale: 1.1,
@@ -67,8 +77,10 @@ export const QUALITY_PRESETS = {
 
 export const DEFAULT_SETTINGS = {
   quality: IS_MOBILE ? 'medium' : 'high',
+  fpsCap: IS_MOBILE ? 45 : 60,
+  batterySaver: false,
   sensitivity: 2.2,
-  resolutionScale: IS_MOBILE ? 0.9 : 1.0,
+  resolutionScale: IS_MOBILE ? 0.95 : 1.0,
   fov: 72,
   volume: 0.85,
   shadows: true,
@@ -105,7 +117,25 @@ export class SettingsManager {
   }
 
   getPreset() {
-    return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.medium;
+    const base = QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.medium;
+    if (!this.data.batterySaver) return base;
+    // Cool / Battery Saver mode cools CPU/GPU via 30 FPS cap, sky cache & shadow/IBL off WITHOUT pixelating resolution!
+    return {
+      ...base,
+      shadows: false,
+      shadowMapSize: 512,
+      useSkyCache: true,
+      useIBL: false,
+      cloudOctaves: 2,
+      dustCount: Math.min(base.dustCount, 60),
+      stormStreaks: Math.min(base.stormStreaks, 90),
+      anisotropy: 2,
+    };
+  }
+
+  getEffectiveFpsCap() {
+    if (this.data.batterySaver) return Math.min(30, this.data.fpsCap || 30);
+    return this.data.fpsCap || (IS_MOBILE ? 45 : 60);
   }
 
   applyQualityPreset(quality) {

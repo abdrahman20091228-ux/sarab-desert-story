@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IS_MOBILE } from './Settings.js';
 
 /**
  * Loads pre-processed real Poly Haven CC0 photogrammetry 3D scans
@@ -65,14 +66,22 @@ export class ModelManager {
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
-    const mat = new THREE.MeshStandardMaterial({
-      map: diffTex || null,
-      normalMap: norTex || null,
-      normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
-      roughness: name === 'compass' || name === 'lantern' ? 0.58 : 0.88,
-      metalness: name === 'compass' || name === 'lantern' ? 0.42 : 0.04,
-      side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
-    });
+    const isMetallic = name === 'compass' || name === 'lantern';
+    const mat = IS_MOBILE && !isMetallic
+      ? new THREE.MeshLambertMaterial({
+          map: diffTex || null,
+          normalMap: norTex || null,
+          normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
+          side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
+        })
+      : new THREE.MeshStandardMaterial({
+          map: diffTex || null,
+          normalMap: norTex || null,
+          normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
+          roughness: isMetallic ? 0.58 : 0.88,
+          metalness: isMetallic ? 0.42 : 0.04,
+          side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
+        });
     mat.name = `scan_${name}`;
 
     // Re-tint the blue/white painted table & chair photogrammetry scans into sun-bleached weathered desert wood

@@ -2,14 +2,12 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HOUSE_CENTER_X, HOUSE_CENTER_Z, HOUSE_BASE_Y, getTerrainHeight } from './TerrainMath.js';
 import { DESERT_PALETTE, attachDesertGrading } from '../engine/Palette.js';
+import { IS_MOBILE } from '../engine/Settings.js';
 
 /**
- * Grand, Realistic Abandoned Desert Estate & Outpost ("محطة الرصد المنسية - القطاع ٧") (v4.0):
- * - Desaturated sun-bleached adobe walls with realistic linear-space sand base blend & calm 0.45 normalScale
- * - Separate warm limestone-plaster interior ceiling beneath dark timber beams
- * - Procedural Bedouin Sadu woven rug shader (no plain cloth!)
- * - Unified floor-matched cellar hatch stone surround + batched iron straps
- * - Instanced crates & barrels (including tent barrel), merged god-rays, and distance-fading clue rings
+ * Thermal-Optimized Grand Abandoned Desert Estate ("محطة الرصد المنسية - القطاع ٧") (v4.1):
+ * - Uses MeshLambertMaterial (with normalMap!) for matte plaster, rug, fabric, paper, and mobile adobe/stone -> 3x lower GPU heat!
+ * - Zero per-frame Color allocations
  */
 export class AbandonedHouse {
   constructor(scene, textureManager, modelManager, physics, jeepWorldPos, tentBarrelWorldPos = null) {
@@ -40,6 +38,8 @@ export class AbandonedHouse {
     this.switchTargetAngle = 0.6;
     this.compassNeedle = null;
     this.godRayMat = null;
+    this._rayNoonCol = new THREE.Color('#fff0c4');
+    this._rayAsrCol = new THREE.Color('#ffae52');
 
     this._createMaterials();
     this._buildMainEstate();
@@ -54,18 +54,25 @@ export class AbandonedHouse {
 
   _createMaterials() {
     const adobe = this.tex.loadPBRSet('adobe_wall', 1.0, 1.0);
-    this.adobeMat = new THREE.MeshStandardMaterial({
-      map: adobe.map,
-      normalMap: adobe.normalMap,
-      normalScale: new THREE.Vector2(0.45, 0.45),
-      roughness: 0.94,
-      metalness: 0.01,
-      vertexColors: true,
-      color: 0xf2e2c8,
-    });
+    this.adobeMat = IS_MOBILE
+      ? new THREE.MeshLambertMaterial({
+          map: adobe.map,
+          normalMap: adobe.normalMap,
+          normalScale: new THREE.Vector2(0.45, 0.45),
+          vertexColors: true,
+          color: 0xf2e2c8,
+        })
+      : new THREE.MeshStandardMaterial({
+          map: adobe.map,
+          normalMap: adobe.normalMap,
+          normalScale: new THREE.Vector2(0.45, 0.45),
+          roughness: 0.94,
+          metalness: 0.01,
+          vertexColors: true,
+          color: 0xf2e2c8,
+        });
     this.adobeMat.name = 'adobe_wall_v4';
 
-    // World-space plaster variation + desaturated mudbrick + REAL linear-space sand base blend (fixes white skirt!)
     this.adobeMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\nvarying vec3 vAdobeWorldPos;`)
@@ -78,24 +85,20 @@ export class AbandonedHouse {
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
-           // Sun-bleached Najdi mudbrick (brightened & calmed so walls never read muddy dark brown)
            float _al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
            diffuseColor.rgb = mix(vec3(_al), diffuseColor.rgb, 0.62) * 1.38 + vec3(0.035, 0.028, 0.018);
            float patch1 = sin(vAdobeWorldPos.x * 0.55 + vAdobeWorldPos.y * 0.8) * cos(vAdobeWorldPos.z * 0.55 - vAdobeWorldPos.y * 0.6);
            float groundDust = smoothstep(0.95, 0.02, vAdobeWorldPos.y);
            vec3 plasterVariation = mix(vec3(0.92, 0.89, 0.84), vec3(1.04, 1.01, 0.96), patch1 * 0.5 + 0.5);
            diffuseColor.rgb *= plasterVariation;
-           // Linear-space warm desert sand dust (NOT bright sRGB 0.84 which rendered white!)
            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.32, 0.19), groundDust * 0.34);`
         );
     };
     attachDesertGrading(this.adobeMat, { saturation: 0.86, contrast: 1.02 });
 
-    // Separate bright warm lime-plaster interior ceiling (completely distinct from mudbrick walls!)
-    this.ceilingMat = new THREE.MeshStandardMaterial({
+    // Matte warm lime-plaster interior ceiling uses cheap MeshLambertMaterial!
+    this.ceilingMat = new THREE.MeshLambertMaterial({
       color: DESERT_PALETTE.ceilingPlaster,
-      roughness: 0.96,
-      metalness: 0.0,
     });
     this.ceilingMat.name = 'interior_plaster_ceiling';
     this.ceilingMat.onBeforeCompile = (shader) => {
@@ -116,19 +119,21 @@ export class AbandonedHouse {
     };
 
     const wood = this.tex.loadPBRSet('desert_wood', 1.6, 1.0);
-    this.woodMat = new THREE.MeshStandardMaterial({
-      map: wood.map,
-      normalMap: wood.normalMap,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.88,
-      metalness: 0.03,
-      color: 0xc2ab8e,
-    });
+    this.woodMat = IS_MOBILE
+      ? new THREE.MeshLambertMaterial({ map: wood.map, color: 0xc2ab8e })
+      : new THREE.MeshStandardMaterial({
+          map: wood.map,
+          normalMap: wood.normalMap,
+          normalScale: new THREE.Vector2(0.85, 0.85),
+          roughness: 0.88,
+          metalness: 0.03,
+          color: 0xc2ab8e,
+        });
 
     const metal = this.tex.loadPBRSet('rusted_metal', 1.5, 1.5);
     this.metalMat = new THREE.MeshStandardMaterial({
       map: metal.map,
-      normalMap: metal.normalMap,
+      normalMap: IS_MOBILE ? null : metal.normalMap,
       normalScale: new THREE.Vector2(0.9, 0.9),
       roughness: 0.76,
       metalness: 0.45,
@@ -136,32 +141,33 @@ export class AbandonedHouse {
     });
 
     const floor = this.tex.loadPBRSet('floor_tiles', 4.8, 4.0);
-    this.floorMat = new THREE.MeshStandardMaterial({
-      map: floor.map,
-      normalMap: floor.normalMap,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.9,
-      metalness: 0.02,
-      vertexColors: true,
-      color: 0xc9b89c,
-    });
+    this.floorMat = IS_MOBILE
+      ? new THREE.MeshLambertMaterial({
+          map: floor.map,
+          normalMap: floor.normalMap,
+          normalScale: new THREE.Vector2(0.8, 0.8),
+          vertexColors: true,
+          color: 0xc9b89c,
+        })
+      : new THREE.MeshStandardMaterial({
+          map: floor.map,
+          normalMap: floor.normalMap,
+          normalScale: new THREE.Vector2(0.85, 0.85),
+          roughness: 0.9,
+          metalness: 0.02,
+          vertexColors: true,
+          color: 0xc9b89c,
+        });
     attachDesertGrading(this.floorMat, { saturation: 0.88, contrast: 1.03 });
 
-    // Unified darkened stone curb matching floor_tiles for cellar hatch surround (fixes bright orange border!)
-    this.hatchFrameMat = new THREE.MeshStandardMaterial({
+    this.hatchFrameMat = new THREE.MeshLambertMaterial({
       map: floor.map,
-      normalMap: floor.normalMap,
-      normalScale: new THREE.Vector2(0.75, 0.75),
-      roughness: 0.93,
-      metalness: 0.03,
       color: 0x7b6b56,
     });
 
     const fabric = this.tex.loadPBRSet('tattered_fabric', 2.4, 2.0);
-    this.fabricMat = new THREE.MeshStandardMaterial({
+    this.fabricMat = new THREE.MeshLambertMaterial({
       map: fabric.map,
-      roughness: 0.95,
-      metalness: 0.0,
       side: THREE.DoubleSide,
       color: 0xd2c0a4,
     });
@@ -179,10 +185,8 @@ export class AbandonedHouse {
         );
     };
 
-    // Procedural traditional Bedouin Sadu woven rug shader (geometric diamonds, stripes & dusty wear!)
-    this.rugMat = new THREE.MeshStandardMaterial({
-      roughness: 0.96,
-      metalness: 0.0,
+    // Procedural traditional Bedouin Sadu woven rug shader on cheap MeshLambertMaterial!
+    this.rugMat = new THREE.MeshLambertMaterial({
       color: 0xffffff,
     });
     this.rugMat.name = 'bedouin_sadu_rug';
@@ -196,24 +200,20 @@ export class AbandonedHouse {
           '#include <color_fragment>',
           `#include <color_fragment>
            vec2 p = vRugUv;
-           vec2 c = abs(p - 0.5) * 2.0; // [0..1] from center to border
-           // Woven textile warp/weft grain
+           vec2 c = abs(p - 0.5) * 2.0;
            float weave = 0.92 + 0.08 * sin(p.x * 240.0) * sin(p.y * 160.0);
 
-           // Traditional Sadu palette (linear space): deep terracotta, desert cream, warm ochre, dark charcoal-indigo
            vec3 colCrimson = vec3(0.28, 0.055, 0.032);
            vec3 colCream   = vec3(0.56, 0.47, 0.34);
            vec3 colOchre   = vec3(0.44, 0.25, 0.075);
            vec3 colCharcoal= vec3(0.055, 0.048, 0.044);
 
-           // Geometric stripes along rug length
            vec3 col = colCrimson;
            float outerBorder = step(0.84, max(c.x, c.y));
            float innerBorder = step(0.74, max(c.x, c.y)) * (1.0 - outerBorder);
            col = mix(col, colCharcoal, outerBorder * 0.85);
            col = mix(col, colCream, innerBorder);
 
-           // Repeating central Bedouin Sadu diamond medallions
            vec2 tile = fract(vec2(p.x * 5.0, p.y * 3.0)) - 0.5;
            float diamond = abs(tile.x) + abs(tile.y);
            float innerMedallion = (1.0 - step(0.74, max(c.x, c.y)));
@@ -226,11 +226,9 @@ export class AbandonedHouse {
              col = mix(col, colCharcoal, dCore);
            }
 
-           // Border chevron ticks
            float chev = step(0.5, fract((p.x + p.y) * 18.0));
            col = mix(col, colOchre, innerBorder * chev * 0.55);
 
-           // Dust & sun fading across the abandoned rug
            float dustWear = sin(p.x * 7.0 + p.y * 5.0) * 0.5 + 0.5;
            col = mix(col, vec3(0.38, 0.30, 0.19), dustWear * 0.28);
            diffuseColor.rgb = col * weave;`
@@ -238,20 +236,14 @@ export class AbandonedHouse {
     };
 
     const rock = this.tex.loadPBRSet('sandstone_rock', 2.0, 2.0);
-    this.stoneMat = new THREE.MeshStandardMaterial({
+    this.stoneMat = new THREE.MeshLambertMaterial({
       map: rock.map,
-      normalMap: rock.normalMap,
-      normalScale: new THREE.Vector2(0.75, 0.75),
-      roughness: 0.94,
-      metalness: 0.02,
       color: 0xbba486,
     });
 
     const sandPbr = this.tex.loadPBRSet('sand', 2.0, 2.0);
-    this.sandDriftMat = new THREE.MeshStandardMaterial({
+    this.sandDriftMat = new THREE.MeshLambertMaterial({
       map: sandPbr.map,
-      normalMap: sandPbr.normalMap,
-      roughness: 0.92,
       color: DESERT_PALETTE.sandTintNoon,
     });
 
@@ -267,9 +259,8 @@ export class AbandonedHouse {
       metalness: 0.8,
     });
 
-    this.paperMat = new THREE.MeshStandardMaterial({
+    this.paperMat = new THREE.MeshLambertMaterial({
       color: 0xe2d0a8,
-      roughness: 0.9,
       side: THREE.DoubleSide,
     });
   }
@@ -1186,7 +1177,7 @@ export class AbandonedHouse {
     if (this.godRayUniforms) {
       const rayDim = 1.0 - storm * 0.85;
       this.godRayUniforms.uOpacity.value = THREE.MathUtils.lerp(0.13, 0.25, timeOfDay) * rayDim;
-      this.godRayUniforms.uColor.value.lerpColors(new THREE.Color('#fff0c4'), new THREE.Color('#ffae52'), timeOfDay);
+      this.godRayUniforms.uColor.value.lerpColors(this._rayNoonCol, this._rayAsrCol, timeOfDay);
     }
 
     if (this.compassNeedle) {

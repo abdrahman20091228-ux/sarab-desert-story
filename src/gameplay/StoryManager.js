@@ -278,23 +278,26 @@ export class StoryManager {
       this.sky.targetTimeOfDay = Math.min(0.96, this.sky.targetTimeOfDay + dt / 320);
     }
 
-    // Update single top mission bar with live distance AND relative directional compass arrow!
-    const activeTarget = this.house.getActiveInteractable();
-    const m = this.getCurrentMission();
-    if (isGameplay && m && activeTarget && playerPos) {
-      const dx = activeTarget.worldPos.x - playerPos.x;
-      const dz = activeTarget.worldPos.z - playerPos.z;
-      const distMeters = Math.max(1, Math.round(Math.hypot(dx, dz)));
-      // Camera forward is (-sin(yaw), -cos(yaw)); compute signed clockwise angle to target
-      const targetAngle = Math.atan2(-dx, -dz);
-      let relRad = playerYaw - targetAngle;
-      while (relRad > Math.PI) relRad -= Math.PI * 2;
-      while (relRad < -Math.PI) relRad += Math.PI * 2;
-      const arrowDeg = (relRad * 180) / Math.PI;
-      this.ui.updateMission(m.objective, `${toArabicDigits(distMeters)}م`, arrowDeg);
-    }
+    // Throttle HUD DOM updates (compass arrow, distance, clock) to 10Hz instead of 60-120Hz!
+    this._hudAccum = (this._hudAccum || 0.2) + dt;
+    if (this._hudAccum >= 0.1) {
+      this._hudAccum = 0;
+      const activeTarget = this.house.getActiveInteractable();
+      const m = this.getCurrentMission();
+      if (isGameplay && m && activeTarget && playerPos) {
+        const dx = activeTarget.worldPos.x - playerPos.x;
+        const dz = activeTarget.worldPos.z - playerPos.z;
+        const distMeters = Math.max(1, Math.round(Math.hypot(dx, dz)));
+        const targetAngle = Math.atan2(-dx, -dz);
+        let relRad = playerYaw - targetAngle;
+        while (relRad > Math.PI) relRad -= Math.PI * 2;
+        while (relRad < -Math.PI) relRad += Math.PI * 2;
+        const arrowDeg = Math.round((relRad * 180) / Math.PI);
+        this.ui.updateMission(m.objective, `${toArabicDigits(distMeters)}م`, arrowDeg);
+      }
 
-    this.ui.updateClock(this.getClockDisplay(this.sky.timeOfDay), this.sky.timeOfDay);
+      this.ui.updateClock(this.getClockDisplay(this.sky.timeOfDay), this.sky.timeOfDay);
+    }
 
     // Typewriter Subtitle Update + Procedural Character Blips
     if (this.activeLine) {

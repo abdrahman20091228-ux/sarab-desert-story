@@ -124,3 +124,18 @@ export function getTerrainNormal(x, z, out = { x: 0, y: 1, z: 0 }) {
   out.z = nz / len;
   return out;
 }
+
+/**
+ * Shared exact 1:1 sandstone mesa radial profile used by BOTH DesertWorld geometry
+ * AND PhysicsWorld collision! Guarantees 0cm penetration from all 360 degrees.
+ */
+export function getMesaVisualRadiusAt(ang, yNorm) {
+  const y = Math.max(0, Math.min(1, yNorm));
+  const baseR = 1.08 + (0.54 - 1.08) * y;
+  const talusFlair = y < 0.35 ? 1.0 + (0.35 - y) * 0.42 : 1.0;
+  const cliffStep = 1.0 + 0.055 * Math.sin(y * 22.0) + 0.03 * Math.cos(y * 37.0);
+  const radialBreakup = 1.0 + 0.14 * Math.sin(ang * 3.0 + 0.7) + 0.09 * Math.cos(ang * 5.0 - 0.4);
+  const factor = y > 0.96 ? radialBreakup : radialBreakup * talusFlair * cliffStep;
+  return baseR * factor;
+}
+

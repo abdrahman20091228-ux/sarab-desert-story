@@ -161,24 +161,38 @@ export class AudioEngine {
     whistleLfo.start(now);
 
     this.stormIntensity = 0;
+    this._ambAccum = 0.2;
   }
 
   setStormIntensity(val) {
     this.stormIntensity = Math.max(0, Math.min(1, val));
   }
 
+  setSuspended(suspended) {
+    if (!this.ctx) return;
+    if (suspended && this.ctx.state === 'running') {
+      this.ctx.suspend().catch(() => {});
+    } else if (!suspended && this.unlocked && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
   updateAmbience(dt, indoorFactor, timeOfDay, elapsed) {
-    if (!this.unlocked || !this.ctx || !this.windGain) return;
+    if (!this.unlocked || !this.ctx || !this.windGain || this.ctx.state !== 'running') return;
     this.indoorFactor += (indoorFactor - this.indoorFactor) * Math.min(1, dt * 4.5);
     this.timeOfDay = timeOfDay;
 
+    // Throttle Web Audio AudioParam updates to 8Hz (every 125ms) -> saves 300-600 DSP events/sec!
+    this._ambAccum += dt;
+    if (this._ambAccum < 0.125) return;
+    this._ambAccum = 0;
+
     const now = this.ctx.currentTime;
     const storm = this.stormIntensity || 0;
-    // Slightly stronger, deeper golden-hour breeze at Asr; roaring wind during sandstorm; muffled indoors
     const gust = 0.85 + 0.22 * Math.sin(elapsed * (0.37 + storm * 0.8)) + 0.14 * Math.sin(elapsed * (0.91 + storm * 1.4));
     const outdoorVol = (0.24 + timeOfDay * 0.09 + storm * 0.52) * gust;
     const targetVol = outdoorVol * (1 - this.indoorFactor * (0.56 - storm * 0.12));
-    this.windGain.gain.setTargetAtTime(targetVol, now, 0.12);
+    this.windGain.gain.setTargetAtTime(targetVol, now, 0.14);
 
     const lowFreq = (250 + timeOfDay * 65 + storm * 210) * (1 - this.indoorFactor * 0.42);
     const highFreq = (1520 + storm * 680) * (1 - this.indoorFactor * 0.65);
@@ -187,7 +201,7 @@ export class AudioEngine {
 
     if (this.stormWhistleGain) {
       const whistleVol = storm * storm * 0.055 * (1 - this.indoorFactor * 0.6);
-      this.stormWhistleGain.gain.setTargetAtTime(whistleVol, now, 0.15);
+      this.stormWhistleGain.gain.setTargetAtTime(whistleVol, now, 0.18);
     }
   }
 

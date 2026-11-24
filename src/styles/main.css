@@ -55,8 +55,6 @@ html, body {
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.08s linear;
-  mix-blend-mode: screen;
   z-index: 4;
   --sun-x: 50%;
   --sun-y: 25%;

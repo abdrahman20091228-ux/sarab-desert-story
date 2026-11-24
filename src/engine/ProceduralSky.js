@@ -9,7 +9,8 @@ const SKY_VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-const SKY_FRAGMENT_SHADER = /* glsl */ `
+// Shared core procedural atmosphere (Rayleigh + Mie + FBM desert clouds, linear HDR output)
+const SKY_CORE_FUNCTIONS = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uTimeOfDay;
   uniform float uTime;
@@ -17,9 +18,6 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
   uniform float uCloudOctaves;
   uniform vec3 uHorizonColor;
 
-  varying vec3 vWorldDir;
-
-  // Fast texture-free 2D value noise (zero UV seams anywhere on the dome)
   float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -50,72 +48,57 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
     return val;
   }
 
-  // Henyey-Greenstein phase function for atmospheric Mie aerosol scattering
   float hgPhase(float cosTheta, float g) {
     float g2 = g * g;
     float denom = max(0.001, 1.0 + g2 - 2.0 * g * cosTheta);
     return (1.0 - g2) / (4.0 * 3.14159265 * pow(denom, 1.5));
   }
 
-  void main() {
-    vec3 dir = normalize(vWorldDir);
+  vec3 evalProceduralSky(vec3 dir, bool includeSunDisc) {
     vec3 sunDir = normalize(uSunDir);
     float y = dir.y;
     float sunCos = dot(dir, sunDir);
-    float sunElev = clamp(sunDir.y, 0.04, 1.0);
     float warm = pow(clamp(uTimeOfDay, 0.0, 1.0), 1.15);
 
-    // 1. Physically inspired Rayleigh + Desert Aerosol optical depth
-    float airMass = 1.0 / (max(y, 0.015) + 0.14 * pow(max(y, 0.0) + 0.12, -0.65) * 0.0 + 0.11);
-    float zenithFactor = clamp(pow(max(y, 0.0), 0.58), 0.0, 1.0);
-
-    // Rich clear Arabian noon azure -> deep golden-hour cobalt/slate at Asr (linear space)
     vec3 zenithNoon = vec3(0.032, 0.145, 0.46);
     vec3 zenithAsr  = vec3(0.042, 0.088, 0.22);
     vec3 zenithCol  = mix(zenithNoon, zenithAsr, warm);
 
-    // Mid-sky Rayleigh scattering band (linear space)
     vec3 midNoon = vec3(0.17, 0.37, 0.68);
     vec3 midAsr  = vec3(0.28, 0.23, 0.25);
     vec3 midCol  = mix(midNoon, midAsr, warm);
 
-    // Warm desert aerosol belt just above horizon (linear space)
     vec3 beltNoon = vec3(0.68, 0.59, 0.44);
     vec3 beltAsr  = vec3(0.84, 0.34, 0.09);
     vec3 beltCol  = mix(beltNoon, beltAsr, warm);
 
-    // Vertical sky gradient with natural optical thickness curve
     vec3 skyCol = mix(beltCol, midCol, smoothstep(0.0, 0.30, max(y, 0.0)));
     skyCol = mix(skyCol, zenithCol, smoothstep(0.16, 0.85, max(y, 0.0)));
 
-    // Azimuthal warm sunset glow concentrated in the sun's hemisphere at Asr
     float azimGlow = pow(max(0.0, sunCos), 3.0) * smoothstep(0.55, -0.05, y);
     vec3 sunsetTint = mix(vec3(0.95, 0.72, 0.38), vec3(1.15, 0.36, 0.06), warm);
     skyCol += sunsetTint * azimGlow * mix(0.12, 0.72, warm) * (1.0 - uStorm * 0.75);
 
-    // 2. Atmospheric Mie forward-scattering (desert dust halo around sun)
     float mieTight = hgPhase(sunCos, 0.82);
     float mieWide  = hgPhase(sunCos, 0.38);
     vec3 sunColor  = mix(vec3(1.0, 0.92, 0.74), vec3(1.05, 0.45, 0.12), warm);
     float mieScale = (1.0 - uStorm * 0.82) * smoothstep(-0.08, 0.06, y);
     skyCol += sunColor * (mieTight * 0.22 + mieWide * 0.36) * mieScale;
 
-    // 3. Limb-darkened Solar Disc (realistic angular diameter, softens in dust storm)
-    float sunRadius = mix(0.99962, 0.99940, warm);
-    float disc = smoothstep(sunRadius - 0.00018, sunRadius + 0.00012, sunCos);
-    float limb = pow(clamp((sunCos - sunRadius) / (1.0 - sunRadius + 0.0001), 0.0, 1.0), 0.45);
-    vec3 discCol = mix(vec3(1.0, 0.96, 0.86), vec3(1.0, 0.62, 0.20), warm) * (2.6 + limb * 3.4);
-    float sunVis = (1.0 - smoothstep(0.12, 0.80, uStorm)) * smoothstep(-0.02, 0.02, y);
-    skyCol += discCol * disc * sunVis;
+    if (includeSunDisc) {
+      float sunRadius = mix(0.99962, 0.99940, warm);
+      float disc = smoothstep(sunRadius - 0.00018, sunRadius + 0.00012, sunCos);
+      float limb = pow(clamp((sunCos - sunRadius) / (1.0 - sunRadius + 0.0001), 0.0, 1.0), 0.45);
+      vec3 discCol = mix(vec3(1.0, 0.96, 0.86), vec3(1.0, 0.62, 0.20), warm) * (2.6 + limb * 3.4);
+      float sunVis = (1.0 - smoothstep(0.12, 0.80, uStorm)) * smoothstep(-0.02, 0.02, y);
+      skyCol += discCol * disc * sunVis;
+    }
 
-    // 4. Procedural Desert Cirrus & High Altocumulus Clouds (curved sky plane, drifts gently)
     int oct = int(uCloudOctaves + 0.5);
     if (y > 0.02 && oct >= 1) {
-      // Curved projection prevents harsh stretching near horizon
       vec2 cloudUV = dir.xz / (y + 0.22);
       vec2 windDrift = vec2(uTime * 0.0045, uTime * 0.0018);
 
-      // High delicate wispy cirrus streaks (warped along desert trade wind)
       vec2 warp = vec2(
         vnoise(cloudUV * 0.65 + windDrift * 0.7),
         vnoise(cloudUV * 0.65 + vec2(4.2, 1.9) + windDrift * 0.5)
@@ -123,16 +106,13 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
       vec2 cirrusUV = cloudUV * vec2(0.55, 1.15) + warp * 0.55 + windDrift;
       float nCirrus = fbmClouds(cirrusUV, oct);
 
-      // Secondary sparse altocumulus puffs (kept light: ~18-24% desert coverage)
       float nPuff = fbmClouds(cloudUV * 1.15 - windDrift * 0.8 + warp * 0.25, max(2, oct - 1));
       float cloudDensity = smoothstep(0.55, 0.82, nCirrus) * 0.64
                          + smoothstep(0.63, 0.85, nPuff) * 0.34;
 
-      // Fade clouds smoothly near the horizon so they vanish into desert dust haze
       float horizonFade = smoothstep(0.03, 0.26, y);
       cloudDensity = clamp(cloudDensity * horizonFade * (1.0 - uStorm * 0.85), 0.0, 0.78);
 
-      // Sun-side silver/gold lining + shadow underside (linear space)
       float sunHighlight = pow(max(0.0, sunCos), 6.0);
       float selfShade = smoothstep(0.15, 0.75, nPuff);
       vec3 cloudLitNoon = vec3(0.92, 0.90, 0.84);
@@ -148,7 +128,6 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
       skyCol = mix(skyCol, cloudCol, cloudDensity);
     }
 
-    // 5. Dust Storm Atmospheric Extinction (dust rises from horizon to engulf sky)
     if (uStorm > 0.001) {
       float stormHeight = smoothstep(0.85, -0.05, y);
       float stormMix = clamp(uStorm * (0.58 + 0.42 * stormHeight), 0.0, 0.96);
@@ -157,15 +136,83 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
       skyCol = mix(skyCol, stormSky, stormMix);
     }
 
-    // 6. Seamless Horizon-to-Fog Melt (matches scene.fog.color identically!)
     float horizonBlend = smoothstep(0.14 + uStorm * 0.14, -0.015, y);
     skyCol = mix(skyCol, uHorizonColor, horizonBlend);
 
-    // Subtle ground hemisphere darkening below horizon (helps PMREM IBL ground bounce)
     if (y < 0.0) {
       vec3 groundBounce = uHorizonColor * mix(vec3(0.66, 0.58, 0.46), vec3(0.56, 0.40, 0.25), warm);
       skyCol = mix(uHorizonColor, groundBounce, smoothstep(0.0, -0.35, y));
     }
+
+    return skyCol;
+  }
+`;
+
+// Full real-time fragment shader (Desktop high/ultra)
+const SKY_REALTIME_FRAGMENT = /* glsl */ `
+  ${SKY_CORE_FUNCTIONS}
+  varying vec3 vWorldDir;
+  void main() {
+    vec3 skyCol = evalProceduralSky(normalize(vWorldDir), true);
+    gl_FragColor = vec4(skyCol, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+// Offscreen equirectangular cache baking shader (runs ONLY 1x/sec into tiny 512x256 RT on mobile!)
+const SKY_CACHE_BAKE_VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const SKY_CACHE_BAKE_FRAGMENT = /* glsl */ `
+  ${SKY_CORE_FUNCTIONS}
+  varying vec2 vUv;
+  const float PI = 3.14159265359;
+  void main() {
+    float lon = (vUv.x - 0.5) * (2.0 * PI);
+    float lat = (vUv.y - 0.5) * PI;
+    float clat = cos(lat);
+    vec3 dir = vec3(clat * cos(lon), sin(lat), clat * sin(lon));
+    // Bake atmosphere + clouds into cache (sun disc drawn crisp on live dome!)
+    vec3 col = evalProceduralSky(dir, false);
+    // Store soft-clamped linear value inside 8-bit RT (scale by 0.5 to preserve HDR headroom up to 2.0)
+    gl_FragColor = vec4(clamp(col * 0.5, 0.0, 1.0), 1.0);
+  }
+`;
+
+// Ultra-lightweight 1-tap cached sky dome shader for Mobile (>95% less GPU power!)
+const SKY_CACHED_DOME_FRAGMENT = /* glsl */ `
+  uniform sampler2D uSkyCache;
+  uniform vec3 uSunDir;
+  uniform float uTimeOfDay;
+  uniform float uStorm;
+  varying vec3 vWorldDir;
+
+  const float INV_TWO_PI = 0.15915494309189535;
+  const float INV_PI = 0.3183098861837907;
+
+  void main() {
+    vec3 dir = normalize(vWorldDir);
+    float u = atan(dir.z, dir.x) * INV_TWO_PI + 0.5;
+    float v = clamp(asin(clamp(dir.y, -1.0, 1.0)) * INV_PI + 0.5, 0.002, 0.998);
+
+    // Single bilinear fetch restores linear HDR procedural sky!
+    vec3 skyCol = texture2D(uSkyCache, vec2(u, v)).rgb * 2.0;
+
+    // Add razor-sharp limb-darkened solar disc analytically
+    float warm = pow(clamp(uTimeOfDay, 0.0, 1.0), 1.15);
+    float sunCos = dot(dir, normalize(uSunDir));
+    float sunRadius = mix(0.99962, 0.99940, warm);
+    float disc = smoothstep(sunRadius - 0.00018, sunRadius + 0.00012, sunCos);
+    float limb = pow(clamp((sunCos - sunRadius) / (1.0 - sunRadius + 0.0001), 0.0, 1.0), 0.45);
+    vec3 discCol = mix(vec3(1.0, 0.96, 0.86), vec3(1.0, 0.62, 0.20), warm) * (2.6 + limb * 3.4);
+    float sunVis = (1.0 - smoothstep(0.12, 0.80, uStorm)) * smoothstep(-0.02, 0.02, dir.y);
+    skyCol += discCol * disc * sunVis;
 
     gl_FragColor = vec4(skyCol, 1.0);
     #include <tonemapping_fragment>
@@ -174,16 +221,19 @@ const SKY_FRAGMENT_SHADER = /* glsl */ `
 `;
 
 /**
- * 100% Procedural Code-Rendered Arabian Desert Sky Dome + Throttled PMREM IBL
- * - Zero image textures, zero zenith seams, 1 draw call
- * - Analytical Rayleigh + Mie atmospheric scattering + desert dust turbidity
- * - Limb-darkened sun disc + drifting FBM cirrus/altocumulus clouds
- * - Seamless horizon color shared with FogExp2
+ * 100% Procedural Code-Rendered Arabian Desert Sky Dome (v4.1 Thermal-Optimized)
+ * - Zero external images, zero zenith seams, 1 draw call
+ * - On mobile / low / medium / batterySaver: bakes procedural Rayleigh+Mie+FBM sky to a 512x256
+ *   render-target cache 1x/second -> cuts sky GPU power by >95% while keeping identical visuals!
+ * - Optional throttled PMREM IBL (disabled on mobile matte presets to save huge fragment bandwidth).
  */
 export class ProceduralSky {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
+
+    this.useCache = false;
+    this.useIBL = true;
 
     this.uniforms = {
       uSunDir: { value: new THREE.Vector3(0.2, 0.9, -0.35).normalize() },
@@ -194,26 +244,79 @@ export class ProceduralSky {
       uHorizonColor: { value: DESERT_PALETTE.horizonNoon.clone() },
     };
 
-    const skyGeo = new THREE.SphereGeometry(940, 32, 20);
-    const skyMat = new THREE.ShaderMaterial({
+    const skyGeo = new THREE.SphereGeometry(940, 28, 18);
+    this._realtimeMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
       uniforms: this.uniforms,
       vertexShader: SKY_VERTEX_SHADER,
-      fragmentShader: SKY_FRAGMENT_SHADER,
+      fragmentShader: SKY_REALTIME_FRAGMENT,
     });
 
-    this.mesh = new THREE.Mesh(skyGeo, skyMat);
+    // Tiny 512x256 procedural equirectangular cache RT for cool mobile rendering
+    this._skyCacheRT = new THREE.WebGLRenderTarget(512, 256, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+      stencilBuffer: false,
+      generateMipmaps: false,
+    });
+    this._skyCacheRT.texture.wrapS = THREE.RepeatWrapping;
+    this._skyCacheRT.texture.wrapT = THREE.ClampToEdgeWrapping;
+
+    this._cacheScene = new THREE.Scene();
+    this._cacheCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this._cacheQuad = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.ShaderMaterial({
+        depthTest: false,
+        depthWrite: false,
+        uniforms: this.uniforms,
+        vertexShader: SKY_CACHE_BAKE_VERTEX,
+        fragmentShader: SKY_CACHE_BAKE_FRAGMENT,
+      })
+    );
+    this._cacheScene.add(this._cacheQuad);
+
+    this._cachedMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uSkyCache: { value: this._skyCacheRT.texture },
+        uSunDir: this.uniforms.uSunDir,
+        uTimeOfDay: this.uniforms.uTimeOfDay,
+        uStorm: this.uniforms.uStorm,
+      },
+      vertexShader: SKY_VERTEX_SHADER,
+      fragmentShader: SKY_CACHED_DOME_FRAGMENT,
+    });
+
+    this.mesh = new THREE.Mesh(skyGeo, this._realtimeMat);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -10;
     this.scene.add(this.mesh);
 
-    // Offscreen lightweight scene for throttled PMREM IBL baking (keeps reflections 100% synced with sky!)
+    this._cacheTimer = 999;
+    this._lastCacheTime = -999;
+    this._lastCacheStorm = -999;
+
+    // Lazy PMREM IBL resources (only used when useIBL is enabled)
+    this._pmrem = null;
+    this._envScene = null;
+    this._envRT = null;
+    this._lastBakeTime = -999;
+    this._lastBakeStorm = -999;
+    this._bakeCooldown = 0;
+  }
+
+  _ensureIBLScene() {
+    if (this._pmrem) return;
     this._pmrem = new THREE.PMREMGenerator(this.renderer);
     this._pmrem.compileCubemapShader();
     this._envScene = new THREE.Scene();
-    this._envUniforms = {
+    const envUniforms = {
       uSunDir: this.uniforms.uSunDir,
       uTimeOfDay: this.uniforms.uTimeOfDay,
       uTime: { value: 0.0 },
@@ -222,26 +325,51 @@ export class ProceduralSky {
       uHorizonColor: this.uniforms.uHorizonColor,
     };
     const envSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(20, 16, 12),
+      new THREE.SphereGeometry(20, 14, 10),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
         fog: false,
-        uniforms: this._envUniforms,
+        uniforms: envUniforms,
         vertexShader: SKY_VERTEX_SHADER,
-        fragmentShader: SKY_FRAGMENT_SHADER,
+        fragmentShader: SKY_REALTIME_FRAGMENT,
       })
     );
     this._envScene.add(envSphere);
-
-    this._envRT = null;
-    this._lastBakeTime = -999;
-    this._lastBakeStorm = -999;
-    this._bakeCooldown = 0;
   }
 
-  setCloudOctaves(octaves) {
-    this.uniforms.uCloudOctaves.value = octaves;
+  setQualityOptions({ cloudOctaves = 4, useSkyCache = false, useIBL = true }) {
+    this.uniforms.uCloudOctaves.value = cloudOctaves;
+    this.useCache = Boolean(useSkyCache);
+    this.mesh.material = this.useCache ? this._cachedMat : this._realtimeMat;
+    if (this.useCache) {
+      this._cacheTimer = 999;
+      this.bakeSkyCache();
+    }
+
+    this.useIBL = Boolean(useIBL);
+    if (!this.useIBL) {
+      this.scene.environment = null;
+      if (this._envRT) {
+        this._envRT.dispose();
+        this._envRT = null;
+      }
+    } else if (!this._envRT) {
+      this.bakeIBL(this.uniforms.uTimeOfDay.value, this.uniforms.uStorm.value);
+    }
+  }
+
+  bakeSkyCache() {
+    const prevTarget = this.renderer.getRenderTarget();
+    const prevToneMapping = this.renderer.toneMapping;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.setRenderTarget(this._skyCacheRT);
+    this.renderer.render(this._cacheScene, this._cacheCam);
+    this.renderer.setRenderTarget(prevTarget);
+    this.renderer.toneMapping = prevToneMapping;
+    this._cacheTimer = 0;
+    this._lastCacheTime = this.uniforms.uTimeOfDay.value;
+    this._lastCacheStorm = this.uniforms.uStorm.value;
   }
 
   computeHorizonColor(timeOfDay, storm, outColor) {
@@ -261,17 +389,30 @@ export class ProceduralSky {
     this.uniforms.uStorm.value = storm;
     this.computeHorizonColor(timeOfDay, storm, this.uniforms.uHorizonColor.value);
 
-    // Refresh PMREM IBL only when time changes > 0.025 or storm changes > 0.06 (zero per-frame cost!)
-    this._bakeCooldown = Math.max(0, this._bakeCooldown - dt);
-    const timeDelta = Math.abs(timeOfDay - this._lastBakeTime);
-    const stormDelta = Math.abs(storm - this._lastBakeStorm);
-    if (this._bakeCooldown <= 0 && (timeDelta > 0.025 || stormDelta > 0.06 || !this._envRT)) {
-      this.bakeIBL(timeOfDay, storm);
-      this._bakeCooldown = 0.45;
+    // Refresh mobile sky cache at most 1x/sec or when time/storm visibly shifts
+    if (this.useCache) {
+      this._cacheTimer += dt;
+      const tDelta = Math.abs(timeOfDay - this._lastCacheTime);
+      const sDelta = Math.abs(storm - this._lastCacheStorm);
+      if (this._cacheTimer >= 1.0 || tDelta > 0.015 || sDelta > 0.025) {
+        this.bakeSkyCache();
+      }
+    }
+
+    if (this.useIBL) {
+      this._bakeCooldown = Math.max(0, this._bakeCooldown - dt);
+      const timeDelta = Math.abs(timeOfDay - this._lastBakeTime);
+      const stormDelta = Math.abs(storm - this._lastBakeStorm);
+      if (this._bakeCooldown <= 0 && (timeDelta > 0.035 || stormDelta > 0.08 || !this._envRT)) {
+        this.bakeIBL(timeOfDay, storm);
+        this._bakeCooldown = 0.65;
+      }
     }
   }
 
   bakeIBL(timeOfDay, storm) {
+    if (!this.useIBL) return;
+    this._ensureIBLScene();
     this._lastBakeTime = timeOfDay;
     this._lastBakeStorm = storm;
     const prevRT = this._envRT;

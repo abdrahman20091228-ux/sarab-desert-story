@@ -26,6 +26,25 @@ export class DustStormSystem {
     this._createSandWall();
     this._createWindStreaks();
     this._setVisible(false);
+    this._lastOverlayVis = false;
+    this._lastOverlayOp = '';
+    if (this.overlayEl) this.overlayEl.classList.add('hidden');
+  }
+
+  _setOverlayOpacity(op) {
+    if (!this.overlayEl) return;
+    const vis = op > 0.006;
+    if (vis !== this._lastOverlayVis) {
+      this._lastOverlayVis = vis;
+      this.overlayEl.classList.toggle('hidden', !vis);
+    }
+    if (vis) {
+      const s = op.toFixed(2);
+      if (s !== this._lastOverlayOp) {
+        this._lastOverlayOp = s;
+        this.overlayEl.style.opacity = s;
+      }
+    }
   }
 
   _createSandWall() {
@@ -216,7 +235,7 @@ export class DustStormSystem {
       this.intensity = 0;
       this.targetIntensity = 0;
       this._setVisible(false);
-      if (this.overlayEl) this.overlayEl.style.opacity = '0';
+      this._setOverlayOpacity(0);
     }
   }
 
@@ -226,6 +245,7 @@ export class DustStormSystem {
     if (immediate) {
       this.intensity = clamped;
       this._setVisible(this.intensity > 0.01);
+      if (this.intensity <= 0.01) this._setOverlayOpacity(0);
     }
   }
 
@@ -233,11 +253,10 @@ export class DustStormSystem {
     if (!this.enabled) {
       this.intensity = 0;
       this._setVisible(false);
-      if (this.overlayEl) this.overlayEl.style.opacity = '0';
+      this._setOverlayOpacity(0);
       return 0;
     }
 
-    // Smooth organic storm buildup and calming
     const rate = this.targetIntensity > this.intensity ? 0.45 : 0.55;
     this.intensity += (this.targetIntensity - this.intensity) * Math.min(1, dt * rate);
     if (Math.abs(this.targetIntensity - this.intensity) < 0.002) {
@@ -268,13 +287,10 @@ export class DustStormSystem {
       this.streakUniforms.uPlayerPos.value.copy(playerPos);
       this.streakUniforms.uColor.value.copy(this._colorTmp);
 
-      if (this.overlayEl) {
-        const gust = 0.88 + 0.12 * Math.sin(elapsed * 2.3) * Math.cos(elapsed * 1.1);
-        const op = this.intensity * gust * (isInsideHouse ? 0.16 : 0.55);
-        this.overlayEl.style.opacity = op.toFixed(3);
-      }
-    } else if (this.overlayEl) {
-      this.overlayEl.style.opacity = '0';
+      const gust = 0.88 + 0.12 * Math.sin(elapsed * 2.3) * Math.cos(elapsed * 1.1);
+      this._setOverlayOpacity(this.intensity * gust * (isInsideHouse ? 0.16 : 0.55));
+    } else {
+      this._setOverlayOpacity(0);
     }
 
     return this.intensity;
