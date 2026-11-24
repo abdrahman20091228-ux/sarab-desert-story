@@ -12,16 +12,19 @@ import { SkyLightingSystem } from './engine/SkyLighting.js';
 import { getTerrainHeight } from './world/TerrainMath.js';
 import { DesertWorld } from './world/DesertWorld.js';
 import { AbandonedHouse } from './world/AbandonedHouse.js';
+import { DustStormSystem } from './world/DustStorm.js';
 import { PlayerController } from './gameplay/PlayerController.js';
 import { CutsceneManager } from './gameplay/CutsceneManager.js';
 import { StoryManager } from './gameplay/StoryManager.js';
 import { UIManager } from './ui/UIManager.js';
 
 /**
- * سَـرَاب: ظهيرة الرمال (SARAB: Mirage of Noon — Chapter I v3.0)
- * Rebuilt with real Poly Haven CC0 360° HDRI skies, real 3D photogrammetry scans,
- * exact visual-physics terrain parity, zero-penetration climbable OBB/ellipse physics,
- * true PUBG outer-ring floating joystick + auto-sprint lock, and <35 draw call 60FPS engine.
+ * سَـرَاب: ظهيرة الرمال (SARAB: Mirage of Noon — Chapter I v4.0)
+ * - 100% code-rendered Rayleigh/Mie procedural desert sky + FBM clouds + throttled PMREM IBL
+ * - Unified desert color palette & lightweight shader grading + aerial-perspective stratified mesas
+ * - Tight ±22m high-res shadows (PCFSoft on desktop), distance-LOD photogrammetry boulders
+ * - 100% GPU-driven desert dust storm (≤2 draw calls at peak, 0 when calm, zero CPU buffer uploads)
+ * - PUBG-style floating joystick + auto-sprint lock & locked 60FPS mobile architecture
  */
 class SarabGame {
   constructor() {
@@ -42,7 +45,6 @@ class SarabGame {
   }
 
   async _bootAsync() {
-    // Preload real Poly Haven 3D photogrammetry binary scans + WebP textures before building the world!
     await this.modelManager.preloadAll();
 
     this._initWorld();
@@ -60,15 +62,16 @@ class SarabGame {
   _initRenderer() {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true, // Smooth dune & building edges on both mobile & desktop
+      antialias: true,
       powerPreference: 'high-performance',
       stencil: false,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.06;
+    this.renderer.toneMappingExposure = 0.96;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // PCFSoftShadowMap on desktop for ultra-smooth shadow edges; fast PCFShadowMap on mobile
+    this.renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -89,15 +92,17 @@ class SarabGame {
       this.texManager,
       this.modelManager,
       this.physics,
-      this.desert.jeepWorldPos
+      this.desert.jeepWorldPos,
+      this.desert.tentBarrelWorldPos
     );
+    this.dustStorm = new DustStormSystem(this.scene, this.settings);
   }
 
   _initGameplay() {
     this.player = new PlayerController(this.camera, this.physics, this.audio, this.settings);
     this.cutscenes = new CutsceneManager(this.camera, this.sky, this.audio, this.player);
     this.ui = new UIManager(this.settings, this.audio);
-    this.story = new StoryManager(this.audio, this.sky, this.house, this.cutscenes, this.ui);
+    this.story = new StoryManager(this.audio, this.sky, this.house, this.cutscenes, this.ui, this.dustStorm);
 
     this.player.onBoundaryHit = () => {
       this.story.sayImmediate('الصحراء هنا بلا نهاية... لن أبتعد كثيراً قبل إنهاء مهمتي.');
@@ -137,6 +142,7 @@ class SarabGame {
 
     this.ui.onFreeRoam = () => {
       this.story.freeRoam = true;
+      this.dustStorm.setTargetIntensity(0.0, true);
       this.sky.setTimeOfDay(0.96, true);
       this.cutscenes.mode = 'gameplay';
       this.cutscenes.containerEl?.classList.remove('cinematic-bars-active');
@@ -166,6 +172,7 @@ class SarabGame {
       this.texManager.setAnisotropy(preset.anisotropy);
       this.sky.applySettings(data, preset);
       this.desert.applySettings(preset);
+      this.dustStorm.applySettings(data, preset);
     };
 
     apply(this.settings.data, this.settings.getPreset());
@@ -200,6 +207,20 @@ class SarabGame {
       const activePos = this.cutscenes.mode === 'gameplay' ? this.player.position : this.camera.position;
       const indoor = this.cutscenes.mode === 'gameplay' ? this.player.isInsideHouse : false;
 
+      // Update GPU Dust Storm and propagate intensity across sky, terrain dust, house turbine/awning, and audio
+      const stormVal = this.dustStorm.update(
+        dt,
+        this.elapsed,
+        this.camera,
+        activePos,
+        indoor,
+        this.sky.timeOfDay
+      );
+      this.sky.setStormIntensity(stormVal);
+      this.desert.setStormIntensity(stormVal);
+      this.house.setStormIntensity(stormVal);
+      this.audio.setStormIntensity(stormVal);
+
       this.sky.update(dt, this.elapsed, this.camera, activePos, indoor);
       this.desert.update(dt, this.elapsed, activePos, this.sky.timeOfDay);
       this.house.update(dt, this.elapsed, this.camera, this.sky.timeOfDay);
@@ -215,7 +236,6 @@ class SarabGame {
       const fps = this.fpsFrames / this.fpsAccum;
       this.ui.updateFPS(fps);
 
-      // Gentle Dynamic Resolution Scaling on mobile if FPS drops below 48 (ignores software-render headless tests)
       if (IS_MOBILE && fps > 14 && fps < 48 && this.dynamicDprMult > 0.72) {
         this.dynamicDprMult = Math.max(0.72, this.dynamicDprMult - 0.05);
         this._applyPixelRatio();
@@ -236,14 +256,26 @@ class SarabGame {
         this.ui.showTitleScreen();
       },
       setTimeOfDay: (t) => this.sky.setTimeOfDay(t, true),
+      setStorm: (val) => {
+        this.dustStorm.setTargetIntensity(val, true);
+        this.sky.setStormIntensity(val, true);
+        this.desert.setStormIntensity(val);
+        this.house.setStormIntensity(val);
+        this.audio.setStormIntensity(val);
+      },
       teleport: (x, z, yaw, pitch = 0, keepTime = true) => {
         const savedTime = this.sky.timeOfDay;
+        const savedStorm = this.dustStorm.targetIntensity;
         this.ui.dismissGateForDebug();
         this.ui.hideTitleScreen();
         this.cutscenes.mode = 'gameplay';
         this.cutscenes.containerEl?.classList.remove('cinematic-bars-active');
         this.story.reset();
-        if (keepTime) this.sky.setTimeOfDay(savedTime, true);
+        if (keepTime) {
+          this.sky.setTimeOfDay(savedTime, true);
+          this.dustStorm.setTargetIntensity(savedStorm, true);
+          this.sky.setStormIntensity(savedStorm, true);
+        }
         this.ui.showHUD();
         this.player.enabled = true;
         this.player.setPose(x, z, yaw, pitch);
@@ -254,13 +286,11 @@ class SarabGame {
       },
       triggerSubtitle: (text, style = 'thought') => this.story.sayImmediate(text, style),
       testRockCollision: () => {
-        // Test tall boulder at (-13.5, -9.5) from 16 angles — verify ZERO horizontal penetration!
         const cx = -13.5;
         const cz = -9.5;
         const gy = getTerrainHeight(cx, cz);
         let maxPenetration = 0;
         const radius = 0.36;
-        // rock_07 sx=5.5, sz=3.6 -> rx = 5.5*0.265 = 1.4575, rz = 3.6*0.49 = 1.764; min radius = 1.4575*0.98 = 1.428
         const minExpectedDist = 1.42 + radius;
         for (let a = 0; a < 16; a++) {
           const ang = (a / 16) * Math.PI * 2;
@@ -274,7 +304,6 @@ class SarabGame {
         return { rockBlockedCleanly: maxPenetration < 0.02, maxPenetration: Number(maxPenetration.toFixed(4)) };
       },
       testJeepClimb: () => {
-        // Verify player can stand on the buried 4x4 Jeep hood AND cabin roof!
         const jx = this.desert.jeepWorldPos.x;
         const jz = this.desert.jeepWorldPos.z;
         const jy = getTerrainHeight(jx, jz);
@@ -289,6 +318,7 @@ class SarabGame {
         drawCalls: this.renderer.info.render.calls,
         triangles: this.renderer.info.render.triangles,
         timeOfDay: this.sky.timeOfDay,
+        storm: Number(this.dustStorm.intensity.toFixed(2)),
         pos: this.player.position.toArray(),
         indoor: this.player.isInsideHouse,
         modelsLoaded: this.modelManager.geometries.size,

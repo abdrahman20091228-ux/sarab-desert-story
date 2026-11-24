@@ -36,38 +36,41 @@ export function getAnalyticTerrainHeight(x, z) {
   const swell = Math.sin(x * 0.01 - z * 0.008) * 4.3 + Math.cos(x * 0.008 + z * 0.014) * 3.7;
   const micro = Math.sin(x * 0.13 + z * 0.1) * 0.09;
 
-  // Dramatic tall rolling desert hills & amphitheater ridges framing the valley
-  const hillWest = Math.exp(-((x + 56) * (x + 56) / 620 + (z + 24) * (z + 24) / 880)) * 16.5;
-  const hillNorth = Math.exp(-((x - 14) * (x - 14) / 960 + (z + 78) * (z + 78) / 560)) * 19.5;
-  const hillEast = Math.exp(-((x - 62) * (x - 62) / 680 + (z + 8) * (z + 8) / 840)) * 15.0;
-  const hillSouth = Math.exp(-((x + 28) * (x + 28) / 760 + (z - 64) * (z - 64) / 640)) * 14.0;
+  // Dramatic tall rolling desert hills & amphitheater ridges framing the valley (kept clear of house window/door sightlines!)
+  const hillWest = Math.exp(-((x + 68) * (x + 68) / 620 + (z - 16) * (z - 16) / 880)) * 13.5;
+  const hillNorth = Math.exp(-((x - 38) * (x - 38) / 960 + (z + 88) * (z + 88) / 560)) * 14.5;
+  const hillEast = Math.exp(-((x - 64) * (x - 64) / 680 + (z + 8) * (z + 8) / 840)) * 14.5;
+  const hillSouth = Math.exp(-((x + 28) * (x + 28) / 760 + (z - 64) * (z - 64) / 640)) * 13.5;
   const distOrigin = Math.hypot(x, z);
-  const farDune = smoothstep(55, 165, distOrigin) * 9.5 * (0.5 + 0.5 * Math.sin(x * 0.018 + z * 0.013));
+  const farDune = smoothstep(62, 165, distOrigin) * 8.5 * (0.5 + 0.5 * Math.sin(x * 0.018 + z * 0.013));
 
   let rawH = swell * 0.45 + ridge1 + ridge2 + micro + hillWest + hillNorth + hillEast + hillSouth + farDune - 2.65;
 
-  // Natural asymmetric wadi blend around the estate + courtyard (no flat circular ring!)
-  const houseBlend = smoothstep(10.8, 26.5, distHouse);
+  // Natural asymmetric wadi blend around the estate + front/back courtyards
+  const houseBlend = smoothstep(13.2, 28.5, distHouse);
   rawH *= houseBlend;
 
   // Gentle dip near wake-up spot so player looks up at dunes, hills & grand outpost
   const wakeFlatten = smoothstep(4.0, 14.5, distWake);
   rawH = rawH * (0.38 + 0.62 * wakeFlatten);
 
-  // Exterior windblown sand drifts piled naturally against outer walls & corners (kept clear of back doorway!)
-  const outsideBox = smoothstep(7.6, 9.2, Math.max(Math.abs(dxHouse), Math.abs(dzHouse) * 1.18));
-  const driftEast = Math.exp(-((x - 8.8) * (x - 8.8) / 14 + (z + 17.5) * (z + 17.5) / 28)) * 1.35 * outsideBox;
-  const driftWest = Math.exp(-((x + 8.6) * (x + 8.6) / 15 + (z + 19.2) * (z + 19.2) / 22)) * 0.95 * outsideBox;
-  const driftBack = Math.exp(-((x + 6.5) * (x + 6.5) / 14 + (z + 26.2) * (z + 26.2) / 14)) * 1.05 * outsideBox;
+  // Exterior windblown sand drifts piled near outer corners (strictly clear of West window & back doorway!)
+  const outsideBox = smoothstep(10.6, 12.6, Math.max(Math.abs(dxHouse), Math.abs(dzHouse) * 1.15));
+  const driftEast = Math.exp(-((x - 11.2) * (x - 11.2) / 14 + (z + 17.5) * (z + 17.5) / 26)) * 1.15 * outsideBox;
+  const driftWestCorner = Math.exp(-((x + 11.5) * (x + 11.5) / 14 + (z + 24.8) * (z + 24.8) / 16)) * 0.75 * outsideBox;
+  const driftBackCorner = Math.exp(-((x - 9.5) * (x - 9.5) / 14 + (z + 28.5) * (z + 28.5) / 16)) * 0.85 * outsideBox;
 
-  // Keep back doorway walkway (x in [-4..5], z in [-24..-31]) gently cleared toward the palms & antenna breaker!
-  const backDoorClear = Math.exp(-((dxHouse - 0.5) * (dxHouse - 0.5) / 28 + (dzHouse + 9.0) * (dzHouse + 9.0) / 24));
-  rawH *= 1.0 - backDoorClear * 0.85;
+  // Keep back courtyard & West study window sightline clearly open to the oasis palms, well & sky!
+  const backYardClear = Math.exp(-((dxHouse - 0.0) * (dxHouse - 0.0) / 85 + (dzHouse + 11.0) * (dzHouse + 11.0) / 70));
+  const westSightClear = Math.exp(-((dxHouse + 12.5) * (dxHouse + 12.5) / 48 + (dzHouse) * (dzHouse) / 36));
+  rawH *= (1.0 - backYardClear * 0.92) * (1.0 - westSightClear * 0.82);
 
-  // Keep enlarged house interior (15.2m x 12.6m) cleanly recessed below stone floor
-  const insideFootprint = 1.0 - smoothstep(7.2, 8.5, Math.max(Math.abs(dxHouse), Math.abs(dzHouse) * 1.18));
-  const h = HOUSE_BASE_Y + rawH + driftEast + driftWest + driftBack;
-  return h * (1.0 - insideFootprint) + (-0.12) * insideFootprint;
+  // Keep enlarged house interior (15.2m x 12.6m) + 1 terrain cell margin strictly below stone floor
+  // (Prevents 4m terrain triangles from ever cutting through interior study floor!)
+  const boxExtent = Math.max(Math.abs(dxHouse) - 9.8, Math.abs(dzHouse) - 8.6);
+  const insideFootprint = 1.0 - smoothstep(0.0, 2.8, boxExtent);
+  const h = HOUSE_BASE_Y + rawH + driftEast + driftWestCorner + driftBackCorner;
+  return h * (1.0 - insideFootprint) + (-0.14) * insideFootprint;
 }
 
 /**

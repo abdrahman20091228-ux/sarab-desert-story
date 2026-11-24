@@ -1,9 +1,9 @@
 /**
- * Graphics, Controls & Audio settings tuned for locked 60FPS on both mobile & desktop.
+ * Graphics, Controls & Audio settings tuned for locked 60FPS on both mobile & desktop (v4.0).
  * Automatically detects touch/mobile devices to pick a high-FPS default preset!
  */
 
-const STORAGE_KEY = 'sarab_settings_v3';
+const STORAGE_KEY = 'sarab_settings_v4';
 
 export const IS_MOBILE =
   typeof window !== 'undefined' &&
@@ -13,10 +13,12 @@ export const IS_MOBILE =
 export const QUALITY_PRESETS = {
   low: {
     label: 'منخفض',
-    dprCap: 0.78,
+    dprCap: 0.8,
     shadowMapSize: 512,
     shadows: false,
-    dustCount: 80,
+    dustCount: 90,
+    stormStreaks: 120,
+    cloudOctaves: 2,
     anisotropy: 1,
     sunFlare: true,
     resolutionScale: 0.78,
@@ -25,9 +27,11 @@ export const QUALITY_PRESETS = {
   medium: {
     label: 'متوسط',
     dprCap: 1.05,
-    shadowMapSize: 512,
+    shadowMapSize: 1024,
     shadows: true,
-    dustCount: 150,
+    dustCount: 160,
+    stormStreaks: 200,
+    cloudOctaves: 3,
     anisotropy: 2,
     sunFlare: true,
     resolutionScale: 0.9,
@@ -36,9 +40,11 @@ export const QUALITY_PRESETS = {
   high: {
     label: 'عالي',
     dprCap: 1.35,
-    shadowMapSize: 1024,
+    shadowMapSize: 2048,
     shadows: true,
     dustCount: 240,
+    stormStreaks: 280,
+    cloudOctaves: 4,
     anisotropy: 4,
     sunFlare: true,
     resolutionScale: 1.0,
@@ -50,6 +56,8 @@ export const QUALITY_PRESETS = {
     shadowMapSize: 2048,
     shadows: true,
     dustCount: 320,
+    stormStreaks: 300,
+    cloudOctaves: 5,
     anisotropy: 8,
     sunFlare: true,
     resolutionScale: 1.1,
@@ -65,6 +73,7 @@ export const DEFAULT_SETTINGS = {
   volume: 0.85,
   shadows: true,
   sunFlare: true,
+  dustStorm: true,
   showFps: false,
 };
 

@@ -202,6 +202,7 @@ export class UIManager {
     };
     bindToggle('opt-shadows', 'shadows');
     bindToggle('opt-sunflare', 'sunFlare');
+    bindToggle('opt-storm', 'dustStorm');
     bindToggle('opt-fps', 'showFps');
   }
 
@@ -227,6 +228,7 @@ export class UIManager {
     };
     setChk('opt-shadows', d.shadows);
     setChk('opt-sunflare', d.sunFlare);
+    setChk('opt-storm', d.dustStorm);
     setChk('opt-fps', d.showFps);
     this._updateFpsVisibility();
   }

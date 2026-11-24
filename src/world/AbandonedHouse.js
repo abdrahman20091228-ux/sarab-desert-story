@@ -1,28 +1,24 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HOUSE_CENTER_X, HOUSE_CENTER_Z, HOUSE_BASE_Y, getTerrainHeight } from './TerrainMath.js';
+import { DESERT_PALETTE, attachDesertGrading } from '../engine/Palette.js';
 
 /**
- * Grand, Realistic Abandoned Desert Estate & Outpost ("محطة الرصد المنسية - القطاع ٧") (v3.0):
- * - Enlarged realistic scale: 15.2m wide x 12.6m deep x 4.35m tall
- * - Authentic Poly Haven `rough_plaster_brick_02` adobe plaster walls with natural 1.4m brick scale + procedural plaster/dirt breakup
- * - Real Poly Haven 3D photogrammetry scans placed inside & outside:
- *   * `seadogs_compass` (Mission 1 antique brass compass)
- *   * `wooden_crate_01` (supply crates on porch & hall)
- *   * `painted_wooden_table` & `painted_wooden_chair_01` (Nader's research desk & chair)
- *   * `vintage_oil_lamp` (glowing brass lantern on study desk)
- *   * `jug_01` & `barrel_03` (ceramic water jug & weathered barrels)
- * - Volumetric sun god-ray shafts pouring through the West Study and East windows!
- * - Detailed iron cellar hatch with wood planks, bolt studs, chains & padlock (animates open smoothly!)
- * - GPU-driven awning cloth flutter + aggressive static mesh batching (<28 total outdoor draw calls!)
+ * Grand, Realistic Abandoned Desert Estate & Outpost ("محطة الرصد المنسية - القطاع ٧") (v4.0):
+ * - Desaturated sun-bleached adobe walls with realistic linear-space sand base blend & calm 0.45 normalScale
+ * - Separate warm limestone-plaster interior ceiling beneath dark timber beams
+ * - Procedural Bedouin Sadu woven rug shader (no plain cloth!)
+ * - Unified floor-matched cellar hatch stone surround + batched iron straps
+ * - Instanced crates & barrels (including tent barrel), merged god-rays, and distance-fading clue rings
  */
 export class AbandonedHouse {
-  constructor(scene, textureManager, modelManager, physics, jeepWorldPos) {
+  constructor(scene, textureManager, modelManager, physics, jeepWorldPos, tentBarrelWorldPos = null) {
     this.scene = scene;
     this.tex = textureManager;
     this.models = modelManager;
     this.physics = physics;
     this.jeepWorldPos = jeepWorldPos;
+    this.tentBarrelWorldPos = tentBarrelWorldPos;
 
     this.group = new THREE.Group();
     this.group.position.set(HOUSE_CENTER_X, HOUSE_BASE_Y, HOUSE_CENTER_Z);
@@ -34,6 +30,8 @@ export class AbandonedHouse {
     this.windTurbine = null;
     this.windVane = null;
     this.awningTimeUniform = { value: 0 };
+    this.awningStormUniform = { value: 0 };
+    this.stormIntensity = 0;
     this.radioGlowMat = null;
     this.radioLight = null;
     this.hatchMesh = null;
@@ -59,13 +57,15 @@ export class AbandonedHouse {
     this.adobeMat = new THREE.MeshStandardMaterial({
       map: adobe.map,
       normalMap: adobe.normalMap,
-      normalScale: new THREE.Vector2(1.15, 1.15),
-      roughness: 0.93,
-      metalness: 0.02,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      roughness: 0.94,
+      metalness: 0.01,
       vertexColors: true,
+      color: 0xf2e2c8,
     });
+    this.adobeMat.name = 'adobe_wall_v4';
 
-    // World-space macro plaster/sand weathering shader so walls NEVER look repetitively tiled!
+    // World-space plaster variation + desaturated mudbrick + REAL linear-space sand base blend (fixes white skirt!)
     this.adobeMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\nvarying vec3 vAdobeWorldPos;`)
@@ -78,11 +78,40 @@ export class AbandonedHouse {
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
+           // Sun-bleached Najdi mudbrick (brightened & calmed so walls never read muddy dark brown)
+           float _al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+           diffuseColor.rgb = mix(vec3(_al), diffuseColor.rgb, 0.62) * 1.38 + vec3(0.035, 0.028, 0.018);
            float patch1 = sin(vAdobeWorldPos.x * 0.55 + vAdobeWorldPos.y * 0.8) * cos(vAdobeWorldPos.z * 0.55 - vAdobeWorldPos.y * 0.6);
-           float groundDust = smoothstep(1.35, 0.05, vAdobeWorldPos.y);
-           vec3 plasterVariation = mix(vec3(0.92, 0.87, 0.79), vec3(1.06, 1.01, 0.94), patch1 * 0.5 + 0.5);
+           float groundDust = smoothstep(0.95, 0.02, vAdobeWorldPos.y);
+           vec3 plasterVariation = mix(vec3(0.92, 0.89, 0.84), vec3(1.04, 1.01, 0.96), patch1 * 0.5 + 0.5);
            diffuseColor.rgb *= plasterVariation;
-           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.72, 0.55), groundDust * 0.35);`
+           // Linear-space warm desert sand dust (NOT bright sRGB 0.84 which rendered white!)
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.32, 0.19), groundDust * 0.34);`
+        );
+    };
+    attachDesertGrading(this.adobeMat, { saturation: 0.86, contrast: 1.02 });
+
+    // Separate bright warm lime-plaster interior ceiling (completely distinct from mudbrick walls!)
+    this.ceilingMat = new THREE.MeshStandardMaterial({
+      color: DESERT_PALETTE.ceilingPlaster,
+      roughness: 0.96,
+      metalness: 0.0,
+    });
+    this.ceilingMat.name = 'interior_plaster_ceiling';
+    this.ceilingMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vCeilPos;`)
+        .replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>\nvCeilPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+        );
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\nvarying vec3 vCeilPos;`)
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+           float mottle = sin(vCeilPos.x * 0.9 + vCeilPos.z * 0.7) * cos(vCeilPos.x * 0.4 - vCeilPos.z * 1.1);
+           diffuseColor.rgb *= mix(0.91, 1.03, mottle * 0.5 + 0.5);`
         );
     };
 
@@ -90,28 +119,42 @@ export class AbandonedHouse {
     this.woodMat = new THREE.MeshStandardMaterial({
       map: wood.map,
       normalMap: wood.normalMap,
-      normalScale: new THREE.Vector2(1.0, 1.0),
+      normalScale: new THREE.Vector2(0.85, 0.85),
       roughness: 0.88,
-      metalness: 0.04,
+      metalness: 0.03,
+      color: 0xc2ab8e,
     });
 
     const metal = this.tex.loadPBRSet('rusted_metal', 1.5, 1.5);
     this.metalMat = new THREE.MeshStandardMaterial({
       map: metal.map,
       normalMap: metal.normalMap,
-      normalScale: new THREE.Vector2(1.1, 1.1),
-      roughness: 0.72,
-      metalness: 0.52,
+      normalScale: new THREE.Vector2(0.9, 0.9),
+      roughness: 0.76,
+      metalness: 0.45,
+      color: 0xa69480,
     });
 
     const floor = this.tex.loadPBRSet('floor_tiles', 4.8, 4.0);
     this.floorMat = new THREE.MeshStandardMaterial({
       map: floor.map,
       normalMap: floor.normalMap,
-      normalScale: new THREE.Vector2(1.1, 1.1),
-      roughness: 0.88,
-      metalness: 0.03,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.9,
+      metalness: 0.02,
       vertexColors: true,
+      color: 0xc9b89c,
+    });
+    attachDesertGrading(this.floorMat, { saturation: 0.88, contrast: 1.03 });
+
+    // Unified darkened stone curb matching floor_tiles for cellar hatch surround (fixes bright orange border!)
+    this.hatchFrameMat = new THREE.MeshStandardMaterial({
+      map: floor.map,
+      normalMap: floor.normalMap,
+      normalScale: new THREE.Vector2(0.75, 0.75),
+      roughness: 0.93,
+      metalness: 0.03,
+      color: 0x7b6b56,
     });
 
     const fabric = this.tex.loadPBRSet('tattered_fabric', 2.4, 2.0);
@@ -120,16 +163,77 @@ export class AbandonedHouse {
       roughness: 0.95,
       metalness: 0.0,
       side: THREE.DoubleSide,
+      color: 0xd2c0a4,
     });
-    // GPU vertex shader flutter for the porch awning canopy (zero CPU vertex loop!)
     this.fabricMat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = this.awningTimeUniform;
+      shader.uniforms.uStorm = this.awningStormUniform;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\nuniform float uTime;`)
+        .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uStorm;`)
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-           transformed.y += sin(uTime * 3.5 + position.x * 1.8 + position.z * 1.5) * 0.045;`
+           float spd = 3.5 + uStorm * 7.5;
+           float amp = 0.042 + uStorm * 0.12;
+           transformed.y += sin(uTime * spd + position.x * 1.8 + position.z * 1.5) * amp;`
+        );
+    };
+
+    // Procedural traditional Bedouin Sadu woven rug shader (geometric diamonds, stripes & dusty wear!)
+    this.rugMat = new THREE.MeshStandardMaterial({
+      roughness: 0.96,
+      metalness: 0.0,
+      color: 0xffffff,
+    });
+    this.rugMat.name = 'bedouin_sadu_rug';
+    this.rugMat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\nvarying vec2 vRugUv;`)
+        .replace('#include <uv_vertex>', `#include <uv_vertex>\nvRugUv = uv;`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\nvarying vec2 vRugUv;`)
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+           vec2 p = vRugUv;
+           vec2 c = abs(p - 0.5) * 2.0; // [0..1] from center to border
+           // Woven textile warp/weft grain
+           float weave = 0.92 + 0.08 * sin(p.x * 240.0) * sin(p.y * 160.0);
+
+           // Traditional Sadu palette (linear space): deep terracotta, desert cream, warm ochre, dark charcoal-indigo
+           vec3 colCrimson = vec3(0.28, 0.055, 0.032);
+           vec3 colCream   = vec3(0.56, 0.47, 0.34);
+           vec3 colOchre   = vec3(0.44, 0.25, 0.075);
+           vec3 colCharcoal= vec3(0.055, 0.048, 0.044);
+
+           // Geometric stripes along rug length
+           vec3 col = colCrimson;
+           float outerBorder = step(0.84, max(c.x, c.y));
+           float innerBorder = step(0.74, max(c.x, c.y)) * (1.0 - outerBorder);
+           col = mix(col, colCharcoal, outerBorder * 0.85);
+           col = mix(col, colCream, innerBorder);
+
+           // Repeating central Bedouin Sadu diamond medallions
+           vec2 tile = fract(vec2(p.x * 5.0, p.y * 3.0)) - 0.5;
+           float diamond = abs(tile.x) + abs(tile.y);
+           float innerMedallion = (1.0 - step(0.74, max(c.x, c.y)));
+           if (innerMedallion > 0.5) {
+             float dOuter = smoothstep(0.42, 0.38, diamond);
+             float dMid   = smoothstep(0.29, 0.25, diamond);
+             float dCore  = smoothstep(0.14, 0.10, diamond);
+             col = mix(col, colCream, dOuter);
+             col = mix(col, colOchre, dMid);
+             col = mix(col, colCharcoal, dCore);
+           }
+
+           // Border chevron ticks
+           float chev = step(0.5, fract((p.x + p.y) * 18.0));
+           col = mix(col, colOchre, innerBorder * chev * 0.55);
+
+           // Dust & sun fading across the abandoned rug
+           float dustWear = sin(p.x * 7.0 + p.y * 5.0) * 0.5 + 0.5;
+           col = mix(col, vec3(0.38, 0.30, 0.19), dustWear * 0.28);
+           diffuseColor.rgb = col * weave;`
         );
     };
 
@@ -137,8 +241,10 @@ export class AbandonedHouse {
     this.stoneMat = new THREE.MeshStandardMaterial({
       map: rock.map,
       normalMap: rock.normalMap,
+      normalScale: new THREE.Vector2(0.75, 0.75),
       roughness: 0.94,
       metalness: 0.02,
+      color: 0xbba486,
     });
 
     const sandPbr = this.tex.loadPBRSet('sand', 2.0, 2.0);
@@ -146,22 +252,23 @@ export class AbandonedHouse {
       map: sandPbr.map,
       normalMap: sandPbr.normalMap,
       roughness: 0.92,
+      color: DESERT_PALETTE.sandTintNoon,
     });
 
     this.darkMetalMat = new THREE.MeshStandardMaterial({
       color: 0x3b3129,
-      roughness: 0.65,
-      metalness: 0.7,
+      roughness: 0.68,
+      metalness: 0.65,
     });
 
     this.brassMat = new THREE.MeshStandardMaterial({
       color: 0xc59b48,
-      roughness: 0.36,
-      metalness: 0.82,
+      roughness: 0.38,
+      metalness: 0.8,
     });
 
     this.paperMat = new THREE.MeshStandardMaterial({
-      color: 0xe6d4aa,
+      color: 0xe2d0a8,
       roughness: 0.9,
       side: THREE.DoubleSide,
     });
@@ -332,8 +439,15 @@ export class AbandonedHouse {
     this._addBox(2.6, 3.65, 2.2, 0.42, 1.4, 2.6, false);
     this._addBox(2.6, 2.92, 2.2, 0.5, 0.14, 2.5, false, this.woodMat);
 
-    // ---- ROOF SLAB, CRUMBLING STEPPED PARAPETS & TIMBER BEAMS ----
+    // ---- ROOF SLAB, PLASTER CEILING, CRUMBLING STEPPED PARAPETS & TIMBER BEAMS ----
     this._addBox(0, 4.46, 0, 15.2, 0.3, 12.6, false);
+    // Dedicated pale warm lime-plaster interior ceiling panel (distinct from mudbrick walls!)
+    const ceilingPanel = new THREE.Mesh(new THREE.PlaneGeometry(14.6, 12.0), this.ceilingMat);
+    ceilingPanel.rotation.x = Math.PI / 2;
+    ceilingPanel.position.set(0, 4.29, 0);
+    ceilingPanel.receiveShadow = true;
+    this.group.add(ceilingPanel);
+
     // Crumbling uneven parapet segments (not a single flat block!)
     this._addBox(-4.2, 4.88, 6.1, 6.4, 0.56, 0.38, false);
     this._addBox(4.4, 4.82, 6.1, 6.0, 0.46, 0.38, false);
@@ -341,12 +455,12 @@ export class AbandonedHouse {
     this._addBox(7.4, 4.82, -1.2, 0.38, 0.44, 10.0, false);
     this._addBox(0, 4.92, -6.1, 15.2, 0.62, 0.38, false);
 
-    // Protruding desert roof log beams + fallen diagonal cracked beam inside hall
+    // Protruding desert roof log beams inside hall
     const beamGeo = new THREE.CylinderGeometry(0.11, 0.12, 16.4, 5);
     beamGeo.rotateZ(Math.PI / 2);
     for (let z = -4.8; z <= 4.8; z += 1.9) {
       const beam = new THREE.Mesh(beamGeo, this.woodMat);
-      beam.position.set(0, 4.18, z);
+      beam.position.set(0, 4.16, z);
       beam.castShadow = false;
       this.group.add(beam);
     }
@@ -373,7 +487,7 @@ export class AbandonedHouse {
     }
     this.group.add(ladder);
 
-    // Windblown desert sand drifts piled naturally in interior & exterior corners
+    // Windblown desert sand drifts piled naturally in interior corners
     const driftPositions = [
       { x: -0.2, y: 0.1, z: 5.1, sx: 2.2, sy: 0.32, sz: 2.6 },
       { x: -6.4, y: 0.12, z: -5.1, sx: 1.8, sy: 0.38, sz: 1.8 },
@@ -389,8 +503,8 @@ export class AbandonedHouse {
       this.group.add(dm);
     });
 
-    // Baked soft ground shadow decal under estate
-    const shGeo = new THREE.PlaneGeometry(21, 18);
+    // Baked soft ground shadow decal under estate (subtle opacity)
+    const shGeo = new THREE.PlaneGeometry(19.5, 16.8);
     shGeo.rotateX(-Math.PI / 2);
     const houseShadow = new THREE.Mesh(
       shGeo,
@@ -398,7 +512,7 @@ export class AbandonedHouse {
         map: this.tex.createContactShadowTexture(),
         transparent: true,
         depthWrite: false,
-        opacity: 0.54,
+        opacity: 0.38,
       })
     );
     houseShadow.position.set(0, 0.03, 0.4);
@@ -488,14 +602,17 @@ export class AbandonedHouse {
       tower.add(b1, b2, b3, b4);
     }
 
-    // Batch rotating wind-vane blades into 1 mesh!
+    // Batch tailArm + tailFin into 1 mesh & blades into 1 mesh (2 draw calls total!)
     this.windVane = new THREE.Group();
     this.windVane.position.set(0, mastH + 0.2, 0);
-    const tailArm = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 0.06), this.metalMat);
-    tailArm.position.set(0.45, 0, 0);
-    const tailFin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.72, 0.04), this.metalMat);
-    tailFin.position.set(1.42, 0.05, 0);
-    this.windVane.add(tailArm, tailFin);
+    const armGeo = new THREE.BoxGeometry(2.1, 0.06, 0.06);
+    armGeo.translate(0.45, 0, 0);
+    const finGeo = new THREE.BoxGeometry(1.05, 0.72, 0.04);
+    finGeo.translate(1.42, 0.05, 0);
+    const tailMesh = new THREE.Mesh(mergeGeometries([armGeo, finGeo], false), this.metalMat);
+    armGeo.dispose();
+    finGeo.dispose();
+    this.windVane.add(tailMesh);
 
     const bladeGeos = [];
     for (let i = 0; i < 8; i++) {
@@ -518,15 +635,14 @@ export class AbandonedHouse {
   }
 
   _buildInteriorRooms() {
-    // ===== ROOM 1: MAIN HALL (Detailed Wood-and-Iron Cellar Hatch + Tattered Carpet + Real 3D Scanned Crates & Jug) =====
-    // Tattered Arabian woven rug in Main Hall
-    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.4), this.fabricMat);
+    // ===== ROOM 1: MAIN HALL (Bedouin Sadu Rug + Unified Stone Cellar Hatch + Instanced Crates & Jug) =====
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.4), this.rugMat);
     rug.rotation.x = -Math.PI / 2;
-    rug.position.set(0.1, 0.17, 2.1);
+    rug.position.set(0.1, 0.175, 2.1);
     rug.receiveShadow = true;
     this.group.add(rug);
 
-    // Stone & iron cellar hatch surround with recessed cellar steps visible underneath when unlocked!
+    // Stone & iron cellar hatch surround (darkened floor-matched stone, NOT bright orange!)
     const cellarPit = new THREE.Mesh(
       new THREE.BoxGeometry(1.68, 0.12, 1.68),
       new THREE.MeshBasicMaterial({ color: 0x0b0704 })
@@ -534,39 +650,57 @@ export class AbandonedHouse {
     cellarPit.position.set(0.0, 0.13, -1.6);
     this.group.add(cellarPit);
 
-    this._addBox(-0.94, 0.21, -1.6, 0.18, 0.1, 2.06, false, this.stoneMat);
-    this._addBox(0.94, 0.21, -1.6, 0.18, 0.1, 2.06, false, this.stoneMat);
-    this._addBox(0.0, 0.21, -2.54, 1.7, 0.1, 0.18, false, this.stoneMat);
-    this._addBox(0.0, 0.21, -0.66, 1.7, 0.1, 0.18, false, this.stoneMat);
+    this._addBox(-0.94, 0.2, -1.6, 0.18, 0.09, 2.06, false, this.hatchFrameMat, false);
+    this._addBox(0.94, 0.2, -1.6, 0.18, 0.09, 2.06, false, this.hatchFrameMat, false);
+    this._addBox(0.0, 0.2, -2.54, 1.7, 0.09, 0.18, false, this.hatchFrameMat, false);
+    this._addBox(0.0, 0.2, -0.66, 1.7, 0.09, 0.18, false, this.hatchFrameMat, false);
 
-    // Pivot hinged hatch door with wooden planks, iron cross-straps, and heavy ring handle (NOT a black box!)
+    // Pivot hinged hatch door with batched iron straps (3 draw calls instead of 5!)
     this.hatchMesh = new THREE.Group();
-    this.hatchMesh.position.set(0.0, 0.24, -2.45); // Pivots at back hinges!
+    this.hatchMesh.position.set(0.0, 0.24, -2.45);
     const hatchPlanks = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.08, 1.72), this.woodMat);
     hatchPlanks.position.set(0, 0, 0.85);
-    hatchPlanks.castShadow = true;
     hatchPlanks.receiveShadow = true;
-    const strap1 = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.1, 0.14), this.metalMat);
-    strap1.position.set(0, 0.01, 0.35);
-    const strap2 = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.1, 0.14), this.metalMat);
-    strap2.position.set(0, 0.01, 1.35);
-    const strapMid = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 1.76), this.metalMat);
-    strapMid.position.set(0, 0.01, 0.85);
+    const s1 = new THREE.BoxGeometry(1.76, 0.1, 0.14);
+    s1.translate(0, 0.01, 0.35);
+    const s2 = new THREE.BoxGeometry(1.76, 0.1, 0.14);
+    s2.translate(0, 0.01, 1.35);
+    const s3 = new THREE.BoxGeometry(0.14, 0.1, 1.76);
+    s3.translate(0, 0.01, 0.85);
+    const strapsMesh = new THREE.Mesh(mergeGeometries([s1, s2, s3], false), this.metalMat);
+    s1.dispose();
+    s2.dispose();
+    s3.dispose();
     const handle = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.028, 6, 12), this.brassMat);
     handle.rotation.x = Math.PI / 2;
     handle.position.set(0, 0.07, 1.48);
-    this.hatchMesh.add(hatchPlanks, strap1, strap2, strapMid, handle);
+    this.hatchMesh.add(hatchPlanks, strapsMesh, handle);
     this.group.add(this.hatchMesh);
 
-    // Real Poly Haven 3D scanned wooden supply crates & ceramic water jug in Main Hall!
-    const crate1 = this.models?.createMesh('crate', 1.35);
-    if (crate1) {
-      crate1.position.set(1.45, 0.16, -4.85);
-      crate1.rotation.y = 0.28;
-      crate1.castShadow = true;
-      this.group.add(crate1);
+    // Batch Hall Crate + Porch Crate into ONE single InstancedMesh (saves 1 draw call!)
+    const crateGeo = this.models?.getGeometry('crate');
+    const crateMat = this.models?.getMaterial('crate');
+    if (crateGeo && crateMat) {
+      const crateInst = new THREE.InstancedMesh(crateGeo, crateMat, 2);
+      crateInst.receiveShadow = true;
+      const d = new THREE.Object3D();
+      // Instance 0: Main Hall supply crate
+      d.position.set(1.45, 0.16, -4.85);
+      d.rotation.set(0, 0.28, 0);
+      d.scale.setScalar(1.35);
+      d.updateMatrix();
+      crateInst.setMatrixAt(0, d.matrix);
+      // Instance 1: Front Porch supply crate (Mission 3!)
+      d.position.set(-3.2, 0.02, 7.6);
+      d.rotation.set(0, 0, 0);
+      d.scale.setScalar(1.15);
+      d.updateMatrix();
+      crateInst.setMatrixAt(1, d.matrix);
+      crateInst.instanceMatrix.needsUpdate = true;
+      this.group.add(crateInst);
     } else {
       this._addBox(1.45, 0.52, -4.85, 1.1, 0.75, 0.75, false, this.woodMat);
+      this._addBox(-3.2, 0.26, 7.6, 0.85, 0.5, 0.72, false, this.woodMat);
     }
     this.physics.addBoxCollider(
       HOUSE_CENTER_X + 0.8,
@@ -581,16 +715,16 @@ export class AbandonedHouse {
     const jugMesh = this.models?.createMesh('jug', 0.55);
     if (jugMesh) {
       jugMesh.position.set(1.35, 0.73, -4.82);
-      jugMesh.castShadow = true;
+      jugMesh.castShadow = false;
       this.group.add(jugMesh);
     }
 
     // ===== ROOM 2: NADER'S RESEARCH STUDY (West Room: x < -2.3) =====
-    // Real Poly Haven 3D scanned `painted_wooden_table` & `painted_wooden_chair_01` & `vintage_oil_lamp`!
+    // Weathered desert wood re-tinted photogrammetry desk, chair & vintage oil lamp!
     const deskMesh = this.models?.createMesh('table', 2.25);
     if (deskMesh) {
       deskMesh.position.set(-5.35, 0.16, -0.4);
-      deskMesh.castShadow = true;
+      deskMesh.castShadow = false;
       deskMesh.receiveShadow = true;
       this.group.add(deskMesh);
     } else {
@@ -610,14 +744,14 @@ export class AbandonedHouse {
     if (chairMesh) {
       chairMesh.position.set(-4.65, 0.16, 0.78);
       chairMesh.rotation.y = -2.4;
-      chairMesh.castShadow = true;
+      chairMesh.castShadow = false;
       this.group.add(chairMesh);
     }
 
     const lampMesh = this.models?.createMesh('lantern', 0.13);
     if (lampMesh) {
       lampMesh.position.set(-6.05, 1.06, -0.62);
-      lampMesh.castShadow = true;
+      lampMesh.castShadow = false;
       this.group.add(lampMesh);
     }
 
@@ -638,12 +772,12 @@ export class AbandonedHouse {
     });
 
     // Tall rusted bookshelf along west room partition
-    this._addBox(-2.85, 1.35, -3.4, 0.62, 2.4, 2.2, true, this.metalMat, true, false);
+    this._addBox(-2.85, 1.35, -3.4, 0.62, 2.4, 2.2, true, this.metalMat, false, false);
 
-    // Soft Volumetric Golden Sunlight God-Ray Shafts (Fresnel + longitudinal edge fade — ZERO hard cylinder edges!)
+    // Merged Soft Volumetric Golden Sunlight God-Ray Shafts (1 draw call instead of 2!)
     this.godRayUniforms = {
       uColor: { value: new THREE.Color('#ffdfa0') },
-      uOpacity: { value: 0.16 },
+      uOpacity: { value: 0.15 },
     };
     this.godRayMat = new THREE.ShaderMaterial({
       transparent: true,
@@ -677,19 +811,21 @@ export class AbandonedHouse {
         }
       `,
     });
-    const rayGeo = new THREE.CylinderGeometry(0.72, 1.35, 3.8, 12, 1, true);
-    const westRay = new THREE.Mesh(rayGeo, this.godRayMat);
-    westRay.position.set(-5.65, 1.65, 0.0);
-    westRay.rotation.z = -0.86;
-    const frontRay = new THREE.Mesh(rayGeo, this.godRayMat);
-    frontRay.scale.set(0.68, 0.78, 0.68);
-    frontRay.position.set(-4.4, 1.55, 4.4);
-    frontRay.rotation.x = -0.82;
-    this.group.add(westRay, frontRay);
+    const ray1 = new THREE.CylinderGeometry(0.72, 1.35, 3.8, 12, 1, true);
+    ray1.rotateZ(-0.86);
+    ray1.translate(-5.65, 1.65, 0.0);
+    const ray2 = new THREE.CylinderGeometry(0.72, 1.35, 3.8, 12, 1, true);
+    ray2.scale(0.68, 0.78, 0.68);
+    ray2.rotateX(-0.82);
+    ray2.translate(-4.4, 1.55, 4.4);
+    const mergedRays = new THREE.Mesh(mergeGeometries([ray1, ray2], false), this.godRayMat);
+    ray1.dispose();
+    ray2.dispose();
+    this.group.add(mergedRays);
 
     // ===== ROOM 3: COMMUNICATIONS ROOM (East Room: x > +2.6) =====
-    this._addBox(5.2, 0.6, -4.4, 2.4, 0.92, 1.05, true, this.woodMat, true, true);
-    this._addBox(6.4, 1.3, 1.8, 0.85, 2.25, 1.9, true, this.metalMat, true, false);
+    this._addBox(5.2, 0.6, -4.4, 2.4, 0.92, 1.05, true, this.woodMat, false, true);
+    this._addBox(6.4, 1.3, 1.8, 0.85, 2.25, 1.9, true, this.metalMat, false, false);
 
     // Analog Field Radio (Mission 6 Climax!)
     const radioGroup = new THREE.Group();
@@ -725,27 +861,36 @@ export class AbandonedHouse {
   }
 
   _buildBackCourtyardAndWell() {
-    // Real Poly Haven 3D scanned `barrel_03` wooden barrels around exterior!
+    // All 5 real Poly Haven scanned wooden barrels (4 around house + 1 under tent!) in ONE InstancedMesh draw call!
     const barrelGeo = this.models?.getGeometry('barrel');
     const barrelMat = this.models?.getMaterial('barrel') || this.metalMat;
     const drumCoords = [
-      [8.3, 2.2],
-      [8.6, 1.15],
-      [-8.3, 4.4],
-      [5.8, -7.8],
+      [8.3, 2.2, 0.72],
+      [8.6, 1.15, 0.72],
+      [-8.3, 4.4, 0.72],
+      [5.8, -7.8, 0.72],
     ];
+    if (this.tentBarrelWorldPos) {
+      drumCoords.push([
+        this.tentBarrelWorldPos.x - HOUSE_CENTER_X,
+        this.tentBarrelWorldPos.z - HOUSE_CENTER_Z,
+        0.65,
+      ]);
+    }
     if (barrelGeo) {
       const bInst = new THREE.InstancedMesh(barrelGeo, barrelMat, drumCoords.length);
       bInst.castShadow = true;
       const dummy = new THREE.Object3D();
-      drumCoords.forEach(([dx, dz], idx) => {
+      drumCoords.forEach(([dx, dz, sc], idx) => {
         const gy = getTerrainHeight(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz) - HOUSE_BASE_Y;
         dummy.position.set(dx, gy, dz);
         dummy.rotation.set(0, idx * 1.1, 0);
-        dummy.scale.setScalar(0.72);
+        dummy.scale.setScalar(sc);
         dummy.updateMatrix();
         bInst.setMatrixAt(idx, dummy.matrix);
-        this.physics.addCylinderCollider(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz, 0.42, gy + 1.15);
+        if (idx < 4) {
+          this.physics.addCylinderCollider(HOUSE_CENTER_X + dx, HOUSE_CENTER_Z + dz, 0.42, gy + 1.15);
+        }
       });
       bInst.instanceMatrix.needsUpdate = true;
       this.group.add(bInst);
@@ -792,18 +937,18 @@ export class AbandonedHouse {
   }
 
   _buildStoryClues() {
-    const registerClue = (id, label, worldPos, radius = 3.8, ringYOffset = 0.14) => {
+    const registerClue = (id, label, worldPos, radius = 3.8, ringYOffset = 0.36) => {
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.14, 0.21, 18),
+        new THREE.RingGeometry(0.10, 0.145, 20),
         new THREE.MeshBasicMaterial({
-          color: 0xffd47a,
+          color: 0xffd982,
           transparent: true,
-          opacity: 0.94,
+          opacity: 0.85,
           side: THREE.DoubleSide,
           depthTest: false,
         })
       );
-      // Anchored tightly right at the clue object (never floating 0.55m away in mid-air!)
+      // Positioned cleanly above the clue object so it never occludes the 3D scanned compass or journal!
       ring.position.copy(worldPos).add(new THREE.Vector3(0, ringYOffset, 0));
       ring.renderOrder = 12;
       ring.visible = false;
@@ -819,7 +964,6 @@ export class AbandonedHouse {
     };
 
     // MISSION 1: Real Poly Haven 3D scanned `seadogs_compass` resting on top of the hero boulder (-8.2, 10.2)!
-    // Hero boulder has sy = 1.55, sink = 0.04*1.55 = 0.062, topY = terrainY + 1.55*0.44 - 0.062 = terrainY + 0.62
     const c1Y = getTerrainHeight(-8.2, 10.2) + 0.56;
     const compassGroup = new THREE.Group();
     compassGroup.position.set(-8.2, c1Y, 10.2);
@@ -838,20 +982,12 @@ export class AbandonedHouse {
     this.compassNeedle = needle;
     compassGroup.add(needle);
     this.scene.add(compassGroup);
-    registerClue('compass', 'فحص البوصلة المحطمة', new THREE.Vector3(-8.2, c1Y + 0.04, 10.2), 4.0, 0.11);
+    registerClue('compass', 'فحص البوصلة المحطمة', new THREE.Vector3(-8.2, c1Y + 0.04, 10.2), 4.0, 0.36);
 
     // MISSION 2: Buried Expedition 4x4 Jeep Wreck along the sand trail
-    registerClue('jeep', 'تفتيش حطام سيارة البعثة', this.jeepWorldPos.clone(), 4.8, 0.18);
+    registerClue('jeep', 'تفتيش حطام سيارة البعثة', this.jeepWorldPos.clone(), 4.8, 0.48);
 
-    // MISSION 3: Expedition Satchel & Canteen on real Poly Haven 3D scanned porch crate!
-    const porchCrate = this.models?.createMesh('crate', 1.15);
-    if (porchCrate) {
-      porchCrate.position.set(-3.2, 0.02, 7.6);
-      porchCrate.castShadow = true;
-      this.group.add(porchCrate);
-    } else {
-      this._addBox(-3.2, 0.26, 7.6, 0.85, 0.5, 0.72, false, this.woodMat);
-    }
+    // MISSION 3: Expedition Satchel & Canteen on the instanced porch crate!
     this.physics.addBoxCollider(
       HOUSE_CENTER_X - 3.75,
       HOUSE_CENTER_X - 2.65,
@@ -867,7 +1003,7 @@ export class AbandonedHouse {
     canteen.position.set(-3.08, 0.59, 7.62);
     const satchel = new THREE.Mesh(
       new THREE.BoxGeometry(0.42, 0.14, 0.32),
-      new THREE.MeshStandardMaterial({ color: 0x6e4b2c, roughness: 0.92 })
+      this.woodMat
     );
     satchel.position.set(-3.38, 0.55, 7.52);
     this.group.add(canteen, satchel);
@@ -876,7 +1012,7 @@ export class AbandonedHouse {
       'فحص حقيبة البعثة والزمزمية',
       new THREE.Vector3(HOUSE_CENTER_X - 3.2, HOUSE_BASE_Y + 0.62, HOUSE_CENTER_Z + 7.6),
       3.8,
-      0.12
+      0.38
     );
 
     // MISSION 4: Torn Field Journal on Nader's Desk inside the West Study Room
@@ -889,7 +1025,7 @@ export class AbandonedHouse {
       'قراءة دفتر ملاحظات نادر',
       new THREE.Vector3(HOUSE_CENTER_X - 5.3, HOUSE_BASE_Y + 1.1, HOUSE_CENTER_Z - 0.32),
       3.8,
-      0.12
+      0.36
     );
 
     // MISSION 5: Wind-Vane Breaker Box outside back-east courtyard wall
@@ -898,7 +1034,7 @@ export class AbandonedHouse {
       'تشغيل قاطع برج الهوائي',
       new THREE.Vector3(HOUSE_CENTER_X + 4.1, HOUSE_BASE_Y + 1.5, HOUSE_CENTER_Z - 6.75),
       3.8,
-      0.08
+      0.42
     );
 
     // MISSION 6: Analog Field Radio inside East Communications Room
@@ -907,7 +1043,7 @@ export class AbandonedHouse {
       'تشغيل المذياع التناظري (تردد ٤٤)',
       new THREE.Vector3(HOUSE_CENTER_X + 5.15, HOUSE_BASE_Y + 1.38, HOUSE_CENTER_Z - 4.35),
       4.0,
-      0.14
+      0.42
     );
   }
 
@@ -936,8 +1072,13 @@ export class AbandonedHouse {
     }
   }
 
+  setStormIntensity(val) {
+    this.stormIntensity = Math.max(0, Math.min(1, val));
+    this.awningStormUniform.value = this.stormIntensity;
+  }
+
   unlockHatch() {
-    this.hatchTargetAngle = -0.82; // Smoothly swings open 47 degrees on its hinges!
+    this.hatchTargetAngle = -0.82;
   }
 
   _optimizeStaticBatches() {
@@ -947,6 +1088,7 @@ export class AbandonedHouse {
       this.metalMat,
       this.darkMetalMat,
       this.stoneMat,
+      this.hatchFrameMat,
       this.brassMat,
       this.paperMat,
       this.sandDriftMat,
@@ -998,6 +1140,7 @@ export class AbandonedHouse {
       toRemove.push(child);
     });
 
+    const shadowSkipMats = new Set([this.paperMat, this.hatchFrameMat, this.brassMat, this.sandDriftMat]);
     for (const [mat, geos] of buckets.entries()) {
       if (geos.length < 2) {
         geos.forEach((g) => g.dispose());
@@ -1007,7 +1150,7 @@ export class AbandonedHouse {
       geos.forEach((g) => g.dispose());
       if (merged) {
         const mesh = new THREE.Mesh(merged, mat);
-        mesh.castShadow = mat !== this.paperMat;
+        mesh.castShadow = !shadowSkipMats.has(mat);
         mesh.receiveShadow = true;
         this.group.add(mesh);
       }
@@ -1023,16 +1166,16 @@ export class AbandonedHouse {
   }
 
   update(dt, elapsed, camera, timeOfDay) {
+    const storm = this.stormIntensity;
     if (this.windTurbine) {
-      this.windTurbine.rotation.x += dt * (2.6 + timeOfDay * 2.5 + Math.sin(elapsed * 0.7) * 0.8);
+      this.windTurbine.rotation.x += dt * (2.6 + timeOfDay * 2.5 + storm * 9.5 + Math.sin(elapsed * 0.7) * 0.8);
     }
     if (this.windVane) {
-      this.windVane.rotation.y = 0.35 + Math.sin(elapsed * 0.42) * 0.25;
+      this.windVane.rotation.y = 0.35 + Math.sin(elapsed * (0.42 + storm * 1.4)) * (0.25 + storm * 0.18);
     }
 
     this.awningTimeUniform.value = elapsed;
 
-    // Smoothly animate physical breaker lever & cellar hatch door
     if (this.switchLever) {
       this.switchLever.rotation.x += (this.switchTargetAngle - this.switchLever.rotation.x) * Math.min(1, dt * 10);
     }
@@ -1041,7 +1184,8 @@ export class AbandonedHouse {
     }
 
     if (this.godRayUniforms) {
-      this.godRayUniforms.uOpacity.value = THREE.MathUtils.lerp(0.14, 0.28, timeOfDay);
+      const rayDim = 1.0 - storm * 0.85;
+      this.godRayUniforms.uOpacity.value = THREE.MathUtils.lerp(0.13, 0.25, timeOfDay) * rayDim;
       this.godRayUniforms.uColor.value.lerpColors(new THREE.Color('#fff0c4'), new THREE.Color('#ffae52'), timeOfDay);
     }
 
@@ -1051,10 +1195,18 @@ export class AbandonedHouse {
 
     const active = this.getActiveInteractable();
     if (active && active.ringMesh) {
-      active.ringMesh.visible = true;
-      active.ringMesh.lookAt(camera.position);
-      const pulse = 0.88 + Math.sin(elapsed * 4.0) * 0.18;
-      active.ringMesh.scale.setScalar(pulse);
+      const dist = camera.position.distanceTo(active.worldPos);
+      // Fade out & hide interaction ring when very close (< 2.2m) so it never overlaps the compass or journal!
+      if (dist < 2.2) {
+        active.ringMesh.visible = false;
+      } else {
+        active.ringMesh.visible = true;
+        active.ringMesh.lookAt(camera.position);
+        const fadeIn = THREE.MathUtils.clamp((dist - 2.2) / 2.8, 0, 1);
+        active.ringMesh.material.opacity = 0.78 * fadeIn;
+        const pulse = 0.88 + Math.sin(elapsed * 4.0) * 0.14;
+        active.ringMesh.scale.setScalar(pulse);
+      }
     }
   }
 }

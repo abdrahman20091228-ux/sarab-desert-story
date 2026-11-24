@@ -60,15 +60,71 @@ export class TextureManager {
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 6, size / 2, size / 2, size / 2);
-    grad.addColorStop(0.0, 'rgba(22, 12, 5, 0.56)');
-    grad.addColorStop(0.45, 'rgba(28, 16, 7, 0.34)');
-    grad.addColorStop(0.78, 'rgba(34, 20, 9, 0.10)');
-    grad.addColorStop(1.0, 'rgba(34, 20, 9, 0.0)');
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 4, size / 2, size / 2, size / 2);
+    grad.addColorStop(0.0, 'rgba(32, 20, 10, 0.42)');
+    grad.addColorStop(0.38, 'rgba(38, 24, 12, 0.24)');
+    grad.addColorStop(0.72, 'rgba(42, 28, 14, 0.06)');
+    grad.addColorStop(1.0, 'rgba(42, 28, 14, 0.0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     const tex = new THREE.CanvasTexture(canvas);
     this._shadowTex = tex;
+    return tex;
+  }
+
+  createTwigClusterTexture() {
+    if (this._twigTex) return this._twigTex;
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    const cx = size * 0.5;
+    const cy = size * 0.5;
+    let seed = 31337;
+    const rand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+
+    // Draw dense organic intertwined dry desert brambles filling the entire circular volume (zero center hole!)
+    for (let i = 0; i < 210; i++) {
+      const a1 = rand() * Math.PI * 2;
+      const r1 = Math.pow(rand(), 0.75) * 0.44 * size;
+      const a2 = a1 + (rand() - 0.5) * 2.8 + (r1 < size * 0.14 ? Math.PI : 0);
+      const r2 = (0.04 + Math.pow(rand(), 0.65) * 0.42) * size;
+      const x1 = cx + Math.cos(a1) * r1;
+      const y1 = cy + Math.sin(a1) * r1;
+      const x2 = cx + Math.cos(a2) * r2;
+      const y2 = cy + Math.sin(a2) * r2;
+      const mx = (x1 + x2) * 0.5 + (rand() - 0.5) * 28;
+      const my = (y1 + y2) * 0.5 + (rand() - 0.5) * 28;
+
+      const shade = Math.round(132 + rand() * 68);
+      ctx.strokeStyle = `rgb(${shade}, ${Math.round(shade * 0.84)}, ${Math.round(shade * 0.58)})`;
+      ctx.lineWidth = 1.4 + rand() * 2.0;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(mx, my, x2, y2);
+      ctx.stroke();
+
+      if (rand() > 0.4) {
+        const bx = mx + (rand() - 0.5) * 16;
+        const by = my + (rand() - 0.5) * 16;
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this._twigTex = tex;
     return tex;
   }
 

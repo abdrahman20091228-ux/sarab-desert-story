@@ -126,6 +126,18 @@ html, body {
   opacity: 0.5;
 }
 
+#dust-storm-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, rgba(208, 148, 86, 0.08) 32%, rgba(168, 108, 52, 0.56) 100%),
+    linear-gradient(105deg, rgba(214, 156, 92, 0.16) 0%, rgba(196, 136, 74, 0.08) 50%, rgba(214, 156, 92, 0.18) 100%);
+  transition: opacity 0.15s linear;
+}
+
 #vignette-layer {
   position: absolute;
   inset: 0;

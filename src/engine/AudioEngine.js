@@ -141,6 +141,30 @@ export class AudioEngine {
     lfo2.connect(lfoGain2);
     lfoGain2.connect(this.windFilterHigh.frequency);
     lfo2.start(now);
+
+    // Layer 3: Low storm whistle (silent unless dust storm is active)
+    this.stormWhistleGain = this.ctx.createGain();
+    this.stormWhistleGain.gain.value = 0.0;
+    const whistleOsc = this.ctx.createOscillator();
+    whistleOsc.type = 'sine';
+    whistleOsc.frequency.value = 185;
+    const whistleLfo = this.ctx.createOscillator();
+    whistleLfo.type = 'sine';
+    whistleLfo.frequency.value = 0.23;
+    const whistleLfoGain = this.ctx.createGain();
+    whistleLfoGain.gain.value = 38;
+    whistleLfo.connect(whistleLfoGain);
+    whistleLfoGain.connect(whistleOsc.frequency);
+    whistleOsc.connect(this.stormWhistleGain);
+    this.stormWhistleGain.connect(this.masterGain);
+    whistleOsc.start(now);
+    whistleLfo.start(now);
+
+    this.stormIntensity = 0;
+  }
+
+  setStormIntensity(val) {
+    this.stormIntensity = Math.max(0, Math.min(1, val));
   }
 
   updateAmbience(dt, indoorFactor, timeOfDay, elapsed) {
@@ -149,16 +173,22 @@ export class AudioEngine {
     this.timeOfDay = timeOfDay;
 
     const now = this.ctx.currentTime;
-    // Slightly stronger, deeper golden-hour breeze at Asr; muffled indoors
-    const gust = 0.85 + 0.22 * Math.sin(elapsed * 0.37) + 0.12 * Math.sin(elapsed * 0.91);
-    const outdoorVol = (0.24 + timeOfDay * 0.09) * gust;
-    const targetVol = outdoorVol * (1 - this.indoorFactor * 0.56);
+    const storm = this.stormIntensity || 0;
+    // Slightly stronger, deeper golden-hour breeze at Asr; roaring wind during sandstorm; muffled indoors
+    const gust = 0.85 + 0.22 * Math.sin(elapsed * (0.37 + storm * 0.8)) + 0.14 * Math.sin(elapsed * (0.91 + storm * 1.4));
+    const outdoorVol = (0.24 + timeOfDay * 0.09 + storm * 0.52) * gust;
+    const targetVol = outdoorVol * (1 - this.indoorFactor * (0.56 - storm * 0.12));
     this.windGain.gain.setTargetAtTime(targetVol, now, 0.12);
 
-    const lowFreq = (250 + timeOfDay * 65) * (1 - this.indoorFactor * 0.42);
-    const highFreq = 1520 * (1 - this.indoorFactor * 0.65);
+    const lowFreq = (250 + timeOfDay * 65 + storm * 210) * (1 - this.indoorFactor * 0.42);
+    const highFreq = (1520 + storm * 680) * (1 - this.indoorFactor * 0.65);
     this.windFilterLow.frequency.setTargetAtTime(lowFreq, now, 0.18);
     this.windFilterHigh.frequency.setTargetAtTime(highFreq, now, 0.18);
+
+    if (this.stormWhistleGain) {
+      const whistleVol = storm * storm * 0.055 * (1 - this.indoorFactor * 0.6);
+      this.stormWhistleGain.gain.setTargetAtTime(whistleVol, now, 0.15);
+    }
   }
 
   /**

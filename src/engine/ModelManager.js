@@ -68,11 +68,32 @@ export class ModelManager {
     const mat = new THREE.MeshStandardMaterial({
       map: diffTex || null,
       normalMap: norTex || null,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.84,
-      metalness: name === 'compass' || name === 'lantern' ? 0.35 : 0.06,
+      normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
+      roughness: name === 'compass' || name === 'lantern' ? 0.58 : 0.88,
+      metalness: name === 'compass' || name === 'lantern' ? 0.42 : 0.04,
       side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
     });
+    mat.name = `scan_${name}`;
+
+    // Re-tint the blue/white painted table & chair photogrammetry scans into sun-bleached weathered desert wood
+    // (preserves real wood grain luminance & normal detail while removing the bright blue/white paint!)
+    if (name === 'table' || name === 'chair') {
+      mat.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+           float _woodLuma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+           float _grain = clamp(_woodLuma * 1.15, 0.16, 0.96);
+           vec3 _desertCedar = vec3(0.32, 0.21, 0.11);
+           vec3 _bleachedHighlight = vec3(0.54, 0.40, 0.25);
+           diffuseColor.rgb = mix(_desertCedar, _bleachedHighlight, smoothstep(0.25, 0.88, _grain)) * (0.68 + _grain * 0.52);`
+        );
+      };
+      mat.customProgramCacheKey = () => `scan_wood_retint_${name}`;
+    } else if (name.startsWith('rock')) {
+      // Gently warm & dust-coat rock scans so they blend naturally with Arabian desert sand
+      mat.color.set('#d8c4a6');
+    }
 
     this.geometries.set(name, geo);
     this.materials.set(name, mat);

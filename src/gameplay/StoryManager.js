@@ -111,12 +111,13 @@ const MISSIONS = [
 ];
 
 export class StoryManager {
-  constructor(audio, skyLighting, house, cutscenes, ui) {
+  constructor(audio, skyLighting, house, cutscenes, ui, dustStorm = null) {
     this.audio = audio;
     this.sky = skyLighting;
     this.house = house;
     this.cutscenes = cutscenes;
     this.ui = ui;
+    this.dustStorm = dustStorm;
 
     this.missionIndex = 0;
     this.chapterComplete = false;
@@ -144,6 +145,7 @@ export class StoryManager {
     this.activeLine = null;
     this.house.setAntennaPowered(false);
     this.sky.setTimeOfDay(0.0, true);
+    this.dustStorm?.setTargetIntensity(0.0, true);
     this.hideSubtitle();
     this._activateCurrentMission();
   }
@@ -236,6 +238,14 @@ export class StoryManager {
         this.cutscenes.smoothAdvanceTime(m.whisperClock, m.whisperPhase, m.timeTarget);
       } else {
         this.sky.setTimeOfDay(Math.max(this.sky.targetTimeOfDay, m.timeTarget), false);
+      }
+
+      // Dramatic Desert Dust Storm story beat: rises after reading journal (Mission 4 -> 5), calms on antenna restore!
+      if (m.id === 'journal' && this.dustStorm) {
+        this.dustStorm.setTargetIntensity(0.88, false);
+        this.enqueueLine('الريح تشتد وعاصفة ترابية تهبّ في الخارج... اتبع سهم البوصلة نحو قاطع الهوائي!', 'thought');
+      } else if (m.id === 'antenna_box' && this.dustStorm) {
+        this.dustStorm.setTargetIntensity(0.0, false);
       }
 
       for (const line of m.lines) {
