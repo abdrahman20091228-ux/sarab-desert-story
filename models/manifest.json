@@ -1,40 +1,4 @@
 {
-  "rock_07": {
-    "name": "rock_07",
-    "source": "Poly Haven CC0 (rock_07)",
-    "verts": 942,
-    "tris": 1730,
-    "bmin": [
-      -0.262,
-      0.003,
-      -0.484
-    ],
-    "bmax": [
-      0.264,
-      0.449,
-      0.5
-    ],
-    "hasDiff": true,
-    "hasNor": true
-  },
-  "rock_09": {
-    "name": "rock_09",
-    "source": "Poly Haven CC0 (rock_09)",
-    "verts": 930,
-    "tris": 1742,
-    "bmin": [
-      -0.255,
-      0.001,
-      -0.5
-    ],
-    "bmax": [
-      0.256,
-      0.227,
-      0.5
-    ],
-    "hasDiff": true,
-    "hasNor": true
-  },
   "crate": {
     "name": "crate",
     "source": "Poly Haven CC0 (wooden_crate_01)",
