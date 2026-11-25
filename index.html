@@ -6,9 +6,9 @@
   <meta name="screen-orientation" content="landscape" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#140e08" />
-  <meta name="description" content="سراب: ظهيرة الرمال — لعبة قصصية ثلاثية الأبعاد بمنظور الشخص الأول في صحراء شاسعة حية، الفصل الأول من الظهر إلى العصر." />
-  <title>سَـرَاب | ظهيرة الرمال</title>
+  <meta name="theme-color" content="#0d0b08" />
+  <meta name="description" content="سراب v5.0 — رحلة استكشاف صحراوية عربية ثلاثية الأبعاد عبر أربع مراحل منفصلة من شمس الظهيرة وحتى البيت المهجور تحت النجوم والمجرة." />
+  <title>سَـرَاب | رحلة الصحراء v5.0</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d98236'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
@@ -27,7 +27,7 @@
     <div id="dust-storm-layer" aria-hidden="true"></div>
     <div id="vignette-layer" aria-hidden="true"></div>
 
-    <!-- Wake-Up Cinematic Eyelids + Blur -->
+    <!-- Eyelids & Blur -->
     <div id="eyelid-layer" aria-hidden="true">
       <div class="eyelid eyelid-top"></div>
       <div class="eyelid eyelid-bottom"></div>
@@ -38,19 +38,22 @@
     <div id="letterbox-top" class="letterbox-bar" aria-hidden="true"></div>
     <div id="letterbox-bottom" class="letterbox-bar" aria-hidden="true"></div>
 
-    <!-- Smooth Non-Blocking Time-Shift Whisper Banner -->
-    <div id="time-whisper-banner" aria-hidden="true">
-      <span id="whisper-clock">١:٢٥ ظهراً</span>
-      <span class="whisper-sep">•</span>
-      <span id="whisper-label">بعد الظهيرة</span>
-    </div>
+    <!-- ==================== BLACK STAGE TRANSITION OVERLAY ==================== -->
+    <section id="stage-transition-overlay" class="hidden" aria-live="polite">
+      <div class="transition-card">
+        <p id="trans-stage-tag" class="transition-tag">المرحلة ١ من ٤ • ١٢:٣٠ ظهراً</p>
+        <h2 id="trans-stage-title" class="transition-title">سهول السراب المفتوحة</h2>
+        <div class="transition-divider"></div>
+        <p id="trans-stage-sub" class="transition-sub">الظهر • رُجُم حجرية وسبخة متشققة</p>
+      </div>
+    </section>
 
     <!-- ==================== MANDATORY FULLSCREEN ENTRY GATE ==================== -->
     <section id="fullscreen-gate" class="screen-overlay active" aria-label="الدخول بملء الشاشة">
       <div class="gate-card">
         <span class="gate-icon">⛶</span>
         <h2 class="gate-title">سَـرَاب</h2>
-        <p class="gate-desc">اضغط للدخول الإجباري في وضع ملء الشاشة الأفقي للحصول على أفضل تجربة سينمائية وأعلى سلاسة</p>
+        <p class="gate-desc">رحلة استكشاف صحراوية عبر ٤ مراحل (الظهر • العصر • الشفق • الليل). اضغط للدخول بملء الشاشة الأفقي</p>
         <button id="btn-enter-fullscreen" class="btn-primary-cinematic" type="button">
           <span class="btn-label">الدخول بملء الشاشة</span>
           <span class="btn-sub">Fullscreen • الوضع الأفقي</span>
@@ -63,23 +66,23 @@
       <div class="title-scrim"></div>
       <div class="title-layout">
         <header class="title-brand">
-          <p class="title-chapter-tag">الفصل الأول • من الظهر إلى العصر</p>
+          <p class="title-chapter-tag">الإصدار ٥.٠ • أربع مراحل منفصلة من الظهر إلى الليل</p>
           <h1 class="title-main">سَـرَاب</h1>
-          <p class="title-subtitle">ظهيرة الرمال المنسية</p>
+          <p class="title-subtitle">رحلة الاستكشاف عبر الصحراء</p>
           <div class="title-divider"></div>
           <p class="title-logline">
-            تستيقظ وحيداً تحت شمس الظهيرة بجوار بيتٍ مهجورٍ تبتلعه الكثبان...
-            كل أثرٍ في هذه الصحراء يعرف اسمك، إلا أنت.
+            اعبر سهول السراب والسبخة المتشققة في لهيب الظهيرة، وشقّ وادي الصخور والنخيل في العصر،
+            واصعد قمة الجبل عند الشفق لترى بصيص نور البيت المهجور تحت سماء النجوم والمجرة.
           </p>
         </header>
 
         <nav class="title-actions" aria-label="القائمة الرئيسية">
           <button id="btn-start-game" class="btn-primary-cinematic" type="button">
-            <span class="btn-label">ابدأ القصة</span>
-            <span class="btn-sub">الفصل الأول — استكشاف صحراوي</span>
+            <span class="btn-label">ابدأ الرحلة</span>
+            <span class="btn-sub">المرحلة ١ — سهول السراب المفتوحة</span>
           </button>
           <div class="title-secondary-row">
-            <button id="btn-open-settings" class="btn-ghost-cinematic" type="button">الإعدادات والجرافيك</button>
+            <button id="btn-open-settings" class="btn-ghost-cinematic" type="button">الإعدادات والمراحل</button>
             <button id="btn-open-controls" class="btn-ghost-cinematic" type="button">التحكم</button>
           </div>
         </nav>
@@ -88,28 +91,28 @@
 
     <!-- ==================== ULTRA-CLEAN ZERO-DISTRACTION HUD ==================== -->
     <div id="hud-layer" class="hidden">
-      <!-- Single Sleek Top-Center Current Mission Banner + Directional Compass Arrow -->
+      <!-- Single Sleek Top-Center Current Stage Waypoint + Directional Arrow -->
       <div id="mission-bar">
         <div class="mission-main">
           <span id="hud-mission-arrow" class="mission-arrow" aria-hidden="true">▲</span>
-          <span id="hud-mission-text">تفحّص البوصلة الملقاة على الصخرة القريبة</span>
+          <span id="hud-mission-text">اتبع الرُّجُم الحجرية عبر السبخة نحو مدخل الوادي</span>
           <span id="hud-mission-dist" class="mission-dist"></span>
         </div>
         <div class="mission-time">
           <span id="hud-sun-icon">☀</span>
-          <span id="hud-clock">١٢:١٥ ظهراً</span>
+          <span id="hud-clock">١٢:٣٠ ظهراً</span>
         </div>
       </div>
 
-      <!-- Persistent PUBG Auto-Sprint Lock Indicator (tap to cancel!) -->
+      <!-- Persistent Auto-Jog Lock Indicator -->
       <button id="auto-sprint-banner" class="auto-sprint-banner hidden" type="button">
-        <span>⚡ الركض التلقائي مُقفَل</span>
+        <span>⚡ الهرولة التلقائية مُقفَلة</span>
         <span class="auto-sprint-cancel">إلغاء ✕</span>
       </button>
 
-      <!-- Minimal Top-Left Controls (FPS + Restore Fullscreen + Settings) -->
+      <!-- Minimal Top-Left Controls -->
       <div class="hud-corner-left">
-        <button id="btn-hud-pause" class="minimal-circle-btn" type="button" aria-label="الإعدادات">
+        <button id="btn-hud-pause" class="minimal-circle-btn" type="button" aria-label="الإعدادات والمراحل">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="4" y1="7" x2="20" y2="7"></line>
             <line x1="4" y1="12" x2="20" y2="12"></line>
@@ -125,17 +128,13 @@
         <div id="reticle-dot"></div>
       </div>
 
-      <!-- Skip Cutscene -->
-      <button id="btn-skip-cutscene" class="hidden" type="button">تخطي ⏭</button>
-
-      <!-- PUBG-Style Floating Joystick (with Integrated Sprint) + Jump Button -->
+      <!-- Touch Controls + Ergonomic Right Action Cluster (Interact + Flashlight + Jump) -->
       <div id="touch-controls-layer">
-        <!-- Left Zone: Invisible until touched; Joystick spawns right under thumb! -->
-        <div id="joystick-zone" aria-label="الحركة والركض">
+        <div id="joystick-zone" aria-label="الحركة">
           <div id="joystick-float-wrap" class="hidden">
             <div id="joystick-sprint-lock">
               <span class="lock-arrow">↑</span>
-              <span>ركض</span>
+              <span>هرولة</span>
             </div>
             <div id="joystick-base">
               <div id="joystick-knob"></div>
@@ -143,60 +142,67 @@
           </div>
         </div>
 
-        <!-- Right High-Sensitivity Touch Look Pad -->
         <div id="look-zone" aria-label="النظر"></div>
 
-        <!-- Bottom-Right Ergonomic Action Cluster (Jump + Contextual Interact) -->
         <div id="right-action-cluster">
           <button id="btn-mobile-interact" class="interact-pill-btn hidden" type="button">
             <span class="interact-glyph">◈</span>
-            <span id="mobile-interact-text">فحص</span>
+            <span id="mobile-interact-text">تأمل</span>
           </button>
 
-          <button id="btn-mobile-jump" class="jump-circle-btn" type="button" aria-label="قفز">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="18 15 12 9 6 15"></polyline>
-              <line x1="12" y1="9" x2="12" y2="20"></line>
-            </svg>
-            <span>قفز</span>
-          </button>
+          <div class="right-circle-row">
+            <button id="btn-flashlight" class="flashlight-circle-btn" type="button" aria-label="الكشاف اليدوي (F)" aria-pressed="false" title="الكشاف اليدوي (F)">
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12v4z"></path>
+                <line x1="6" y1="6" x2="18" y2="6"></line>
+                <line x1="12" y1="12" x2="12" y2="12.01"></line>
+              </svg>
+              <span>كشاف</span>
+            </button>
+
+            <button id="btn-mobile-jump" class="jump-circle-btn" type="button" aria-label="قفز">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="18 15 12 9 6 15"></polyline>
+                <line x1="12" y1="9" x2="12" y2="20"></line>
+              </svg>
+              <span>قفز</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- ==================== BORDERLESS CINEMATIC SUBTITLES ==================== -->
     <div id="subtitle-container" class="hidden" aria-live="polite">
-      <div id="subtitle-speaker" class="subtitle-speaker hidden"></div>
       <p id="subtitle-text" class="subtitle-text"></p>
     </div>
 
-    <!-- ==================== CLUE INSPECTION MODAL ==================== -->
-    <div id="inspect-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
-      <div class="inspect-card">
-        <div class="inspect-header">
-          <span id="inspect-tag" class="inspect-tag">المهمة</span>
-          <h2 id="inspect-title">عنوان الدليل</h2>
-        </div>
-        <div id="inspect-body" class="inspect-body"></div>
-        <div class="inspect-footer">
-          <button id="btn-close-inspect" class="btn-primary-cinematic compact" type="button">متابعة</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== SETTINGS MODAL ==================== -->
-    <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="الإعدادات">
+    <!-- ==================== SETTINGS & STAGES MODAL ==================== -->
+    <div id="settings-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="الإعدادات والمراحل">
       <div class="settings-panel">
         <header class="settings-header">
-          <h2>الإعدادات والجرافيك</h2>
+          <h2>الإعدادات والمراحل</h2>
           <button id="btn-close-settings" class="close-btn" type="button" aria-label="إغلاق">✕</button>
         </header>
 
         <div class="settings-grid">
           <div class="setting-row">
             <div class="setting-info">
+              <label>الانتقال السريع بين المراحل</label>
+              <span>يفرّغ المرحلة السابقة من الذاكرة ويشغّل المرحلة المختارة</span>
+            </div>
+            <div class="segmented-control">
+              <button type="button" data-jump-stage="1">١ الظهر</button>
+              <button type="button" data-jump-stage="2">٢ الوادي</button>
+              <button type="button" data-jump-stage="3">٣ القمة</button>
+              <button type="button" data-jump-stage="4">٤ الليل</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
               <label for="opt-quality">مستوى الجرافيك</label>
-              <span>يوازن بين جودة الرمال والظلال وثبات 60 فريم</span>
+              <span>إضاءة مطبوخة + تظليل حواف Contact AO لحرارة منخفضة ودقة عالية</span>
             </div>
             <div class="segmented-control" id="opt-quality">
               <button type="button" data-val="low">منخفض</button>
@@ -209,7 +215,7 @@
           <div class="setting-row">
             <div class="setting-info">
               <label for="opt-sensitivity">حساسية اللمس والكاميرا</label>
-              <span>استجابة سريعة للمس والدوران</span>
+              <span>استجابة سلسة للمس والدوران</span>
             </div>
             <div class="slider-wrap">
               <input id="opt-sensitivity" type="range" min="0.6" max="4.0" step="0.1" value="2.2" />
@@ -220,18 +226,18 @@
           <div class="setting-row">
             <div class="setting-info">
               <label for="opt-resolution">دقة العرض (Scale)</label>
-              <span>خفضها يضاعف الفريمات على الهواتف فوراً</span>
+              <span>تبقى واضحة بفضل طبخ الإضاءة وContact AO</span>
             </div>
             <div class="slider-wrap">
-              <input id="opt-resolution" type="range" min="0.5" max="1.4" step="0.05" value="0.85" />
-              <span id="val-resolution">85%</span>
+              <input id="opt-resolution" type="range" min="0.6" max="1.4" step="0.05" value="1.0" />
+              <span id="val-resolution">100%</span>
             </div>
           </div>
 
           <div class="setting-row">
             <div class="setting-info">
               <label for="opt-fov">مجال الرؤية (FOV)</label>
-              <span>يتسع تلقائياً عند الركض الحقيقي</span>
+              <span>زاوية الرؤية للمنظور الأول</span>
             </div>
             <div class="slider-wrap">
               <input id="opt-fov" type="range" min="60" max="90" step="1" value="72" />
@@ -242,7 +248,7 @@
           <div class="setting-row">
             <div class="setting-info">
               <label for="opt-volume">مستوى الصوت</label>
-              <span>الرياح، الخطوات، ونقرات الحوار</span>
+              <span>رياح الصحراء، صدى الوادي، صراصير الليل، والخطوات</span>
             </div>
             <div class="slider-wrap">
               <input id="opt-volume" type="range" min="0" max="1" step="0.05" value="0.85" />
@@ -269,7 +275,7 @@
             </label>
             <label class="toggle-item">
               <input id="opt-shadows" type="checkbox" checked />
-              <span>الظلال</span>
+              <span>ظلال فورية</span>
             </label>
             <label class="toggle-item">
               <input id="opt-sunflare" type="checkbox" checked />
@@ -277,7 +283,7 @@
             </label>
             <label class="toggle-item">
               <input id="opt-storm" type="checkbox" checked />
-              <span>العاصفة الترابية</span>
+              <span>غبار الوادي</span>
             </label>
             <label class="toggle-item">
               <input id="opt-fps" type="checkbox" />
@@ -302,12 +308,12 @@
         </header>
         <div class="controls-list">
           <div class="control-item">
-            <strong>الهواتف (تحكم بأسلوب PUBG)</strong>
-            <p>اليسار: عصا حركة عائمة تظهر تحت إبهامك (المشي داخل الحلقة، واسحب للأمام خارج الحلقة للركض أو ارفعها للأيقونة لقفل الركض التلقائي) • اليمين: دوران سريع للكاميرا + زر (قفز) لتسلق الصخور والسيارة + زر (فحص) يظهر تلقائياً عند الاقتراب.</p>
+            <strong>الهواتف (تحكم لمسي مريح)</strong>
+            <p>اليسار: عصا حركة عائمة تظهر تحت إبهامك للمشي الواقعي (~3.4 م/ث) والهرولة عند السحب للأعلى • اليمين: دوران الكاميرا + زر (كشاف) لإضاءة الليل + زر (قفز) لتسلق الصخور.</p>
           </div>
           <div class="control-item">
             <strong>الحاسوب</strong>
-            <p>WASD للحركة • Shift للركض • Space للقفز والتسلق • الفأرة للنظر • E للتفاعل مع المهمة • Esc للإعدادات.</p>
+            <p>WASD للحركة • Shift للهرولة • Space للقفز • F لتشغيل/إطفاء الكشاف اليدوي • E للتفاعل • الفأرة للنظر • Esc للإعدادات.</p>
           </div>
         </div>
         <footer class="settings-footer">
@@ -316,19 +322,18 @@
       </div>
     </div>
 
-    <!-- ==================== CHAPTER 1 ENDING SCREEN ==================== -->
-    <section id="ending-screen" class="screen-overlay hidden" aria-label="نهاية الفصل الأول">
+    <!-- ==================== JOURNEY ENDING SCREEN ==================== -->
+    <section id="ending-screen" class="screen-overlay hidden" aria-label="نهاية رحلة سراب">
       <div class="ending-card">
-        <p class="title-chapter-tag">نهاية الفصل الأول</p>
-        <h2 class="ending-title">لقد حلّ العصر...</h2>
+        <p class="title-chapter-tag">سَـرَاب v5.0 • ختام الرحلة</p>
+        <h2 class="ending-title">تحت سماء النجوم...</h2>
         <p class="ending-text">
-          انفتح باب القبو الحديدي أسفل البيت المهجور، وصوت زملائك يناديك من تحت الرمال
-          بينما تميل الشمس نحو الغروب فوق تلال الصحراء.
+          من لهيب الظهيرة فوق السبخة المتشققة، عبر جروف الوادي وأطلاله، إلى قمة الجبل عند الشفق...
+          وصلت أخيراً إلى البيت المهجور تحت المجرة والهلال.
         </p>
-        <p class="ending-next">يتبع في الفصل الثاني: «ما تحت الرمال»</p>
         <div class="ending-actions">
-          <button id="btn-free-roam" class="btn-primary-cinematic compact" type="button">التجول الحر في العصر</button>
-          <button id="btn-replay-chapter" class="btn-ghost-cinematic compact" type="button">إعادة الفصل</button>
+          <button id="btn-free-roam" class="btn-primary-cinematic compact" type="button">التجول الحر ليلاً</button>
+          <button id="btn-replay-chapter" class="btn-ghost-cinematic compact" type="button">إعادة الرحلة</button>
         </div>
       </div>
     </section>

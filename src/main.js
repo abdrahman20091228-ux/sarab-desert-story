@@ -9,22 +9,21 @@ import { ModelManager } from './engine/ModelManager.js';
 import { AudioEngine } from './engine/AudioEngine.js';
 import { PhysicsWorld } from './engine/Physics.js';
 import { SkyLightingSystem } from './engine/SkyLighting.js';
-import { getTerrainHeight, getMesaVisualRadiusAt } from './world/TerrainMath.js';
-import { DesertWorld } from './world/DesertWorld.js';
-import { AbandonedHouse } from './world/AbandonedHouse.js';
+import { StageManager } from './world/StageManager.js';
 import { DustStormSystem } from './world/DustStorm.js';
+import { FlashlightSystem } from './gameplay/Flashlight.js';
 import { PlayerController } from './gameplay/PlayerController.js';
 import { CutsceneManager } from './gameplay/CutsceneManager.js';
-import { StoryManager } from './gameplay/StoryManager.js';
+import { JourneyManager } from './gameplay/JourneyManager.js';
 import { UIManager } from './ui/UIManager.js';
 
 /**
- * سَـرَاب: ظهيرة الرمال (SARAB: Mirage of Noon — Chapter I v4.1 Thermal & Physics Edition)
- * - True Frame Pacer (caps 90/120Hz phones to 45 FPS default / 30 FPS Cool Mode)
- * - Zero GPU rendering (0% load) when tab hidden, paused, or behind modals/fullscreen gate
- * - Disables 4x MSAA on mobile tiled GPUs + 512x256 procedural sky cache (-95% sky GPU power)
- * - Fixed shadow redraw leak (0-3 shadow updates/sec instead of 60-120/sec)
- * - 1:1 exact sandstone mesa/mountain collision verified from all 360 degrees
+ * سَـرَاب v5.0 (SARAB v5.0 — 4-Stage Desert Exploration Journey: Noon -> Afternoon -> Sunset -> Starry Night)
+ * - 4 separate rich walking stages (50–100s each at realistic ~3.4 m/s walk speed) with black transition & full GPU disposal
+ * - Nano Banana Arabian desert sand, rocky canyon floor & cracked sabkha textures + clean derived Sobel normalMaps
+ * - Baked Lighting & Contact AO on terrain, cairns, cliffs, ruins & walls (keeps phones cool without lowering resolution!)
+ * - Stage-aware procedural audio (Noon wind, echoing Canyon, Summit ridge rush, Night crickets & breeze, 4-surface footsteps, Flashlight click)
+ * - Handheld Flashlight (F key & on-screen HUD button) for Starry Night Stage 4
  */
 class SarabGame {
   constructor() {
@@ -38,7 +37,6 @@ class SarabGame {
     this.elapsed = 0;
     this.fpsFrames = 0;
     this.fpsAccum = 0;
-    this.dynamicDprMult = 1.0;
     this._lastRenderMs = 0;
     this._renderedInitialFrame = false;
 
@@ -58,6 +56,8 @@ class SarabGame {
     window.addEventListener('resize', () => this._onResize());
     this._onResize();
 
+    // Load Stage 1 for the live 3D Title Vista
+    this.stages.loadStage(1);
     this.cutscenes.startTitleCamera();
     requestAnimationFrame((ts) => this._animate(ts));
   }
@@ -65,14 +65,14 @@ class SarabGame {
   _initRenderer() {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: !IS_MOBILE,
       powerPreference: IS_MOBILE ? 'default' : 'high-performance',
       stencil: false,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = !IS_MOBILE;
     this.renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
@@ -80,42 +80,50 @@ class SarabGame {
       this.settings.data.fov,
       window.innerWidth / window.innerHeight,
       0.14,
-      1150
+      1450
     );
   }
 
   _initWorld() {
     this.texManager = new TextureManager(this.renderer);
-    this.physics = new PhysicsWorld(getTerrainHeight);
+    this.physics = new PhysicsWorld(() => 0);
     this.sky = new SkyLightingSystem(this.scene, this.renderer, this.settings);
-    this.desert = new DesertWorld(this.scene, this.texManager, this.modelManager, this.physics, this.settings);
-    this.house = new AbandonedHouse(
-      this.scene,
-      this.texManager,
-      this.modelManager,
-      this.physics,
-      this.desert.jeepWorldPos,
-      this.desert.tentBarrelWorldPos
-    );
+    this.stages = new StageManager(this.scene, this.texManager, this.modelManager, this.physics, this.sky, this.settings);
     this.dustStorm = new DustStormSystem(this.scene, this.settings);
+    this.flashlight = new FlashlightSystem(this.scene, this.camera, this.audio);
   }
 
   _initGameplay() {
-    this.player = new PlayerController(this.camera, this.physics, this.audio, this.settings);
-    this.cutscenes = new CutsceneManager(this.camera, this.sky, this.audio, this.player);
+    this.player = new PlayerController(this.camera, this.physics, this.audio, this.settings, this.flashlight);
+    this.cutscenes = new CutsceneManager(this.camera, this.stages, this.player);
     this.ui = new UIManager(this.settings, this.audio);
-    this.story = new StoryManager(this.audio, this.sky, this.house, this.cutscenes, this.ui, this.dustStorm);
+    this.journey = new JourneyManager(
+      this.audio,
+      this.stages,
+      this.player,
+      this.flashlight,
+      this.dustStorm,
+      this.ui
+    );
+
+    this.flashlight.onToggle((isOn) => {
+      this.ui.setFlashlightUI(isOn, this.journey.stageId === 4);
+    });
 
     this.player.onBoundaryHit = () => {
-      this.story.sayImmediate('الصحراء هنا بلا نهاية... لن أبتعد كثيراً قبل إنهاء مهمتي.');
+      this.journey.sayImmediate('التضاريس هنا وعرة... سأبقى على المسار الصحراوي.', this.journey.stageId === 4 ? 'night' : 'thought');
     };
 
-    this.ui.onStartGame = () => {
-      this.story.reset();
-      this.cutscenes.startWakeupCutscene(
-        (line) => this.story.sayImmediate(line, 'thought'),
-        () => this.ui.showHUD()
-      );
+    this.ui.onStartGame = async () => {
+      this.cutscenes.enterGameplay();
+      this.ui.showHUD();
+      await this.journey.transitionToStage(1, { immediate: false, showOverlay: true });
+    };
+
+    this.ui.onSelectStage = async (stageId) => {
+      this.cutscenes.enterGameplay();
+      this.ui.showHUD();
+      await this.journey.transitionToStage(stageId, { immediate: false, showOverlay: true });
     };
 
     this.ui.onInteract = () => {
@@ -123,14 +131,14 @@ class SarabGame {
         try {
           if (navigator.vibrate) navigator.vibrate(15);
         } catch {}
-        this.story.handleInteract(this.player.focusedInteractable);
+        this.journey.handleInteract(this.player.focusedInteractable);
       }
     };
 
     this.ui.onPauseToggle = (isPaused) => {
       this.paused = isPaused;
       this.audio.setSuspended(isPaused || this.tabHidden);
-      if (this.cutscenes.mode === 'gameplay') {
+      if (this.cutscenes.mode === 'gameplay' && !this.journey.transitioning) {
         this.player.enabled = !isPaused;
       }
     };
@@ -139,39 +147,34 @@ class SarabGame {
       this.paused = false;
       this.audio.setSuspended(false);
       this.player.enabled = false;
-      this.story.reset();
+      this.flashlight.setEnabled(false, false);
+      this.stages.loadStage(1);
       this.cutscenes.startTitleCamera();
       this.ui.showTitleScreen();
     };
 
     this.ui.onFreeRoam = () => {
-      this.story.freeRoam = true;
-      this.dustStorm.setTargetIntensity(0.0, true);
-      this.sky.setTimeOfDay(0.96, true);
-      this.cutscenes.mode = 'gameplay';
-      this.cutscenes.containerEl?.classList.remove('cinematic-bars-active');
-      this.player.setPose(-5.0, -4.0, -0.4, -0.02);
+      this.journey.freeRoam = true;
+      this.cutscenes.enterGameplay();
       this.player.enabled = true;
-      this.story.sayImmediate('وقت العصر الذهبي... تجوّل بحرية في الصحراء وتأمل الأجواء.');
+      this.journey.sayImmediate('تجول بحرية تحت النجوم والمجرة حول البيت المهجور.', 'night');
     };
 
-    this.ui.onReplayChapter = () => this.ui.onStartGame();
+    this.ui.onReplayJourney = () => this.ui.onStartGame();
   }
 
   _bindVisibilityGuard() {
     document.addEventListener('visibilitychange', () => {
       this.tabHidden = document.hidden;
       this.audio.setSuspended(this.tabHidden || this.paused);
-      if (!this.tabHidden) {
-        this._lastRenderMs = performance.now();
-      }
+      if (!this.tabHidden) this._lastRenderMs = performance.now();
     });
   }
 
   _applyPixelRatio() {
     const data = this.settings.data;
     const preset = this.settings.getPreset();
-    const effectiveDpr = Math.max(0.6, Math.min(1.85, Math.min(window.devicePixelRatio || 1, preset.dprCap) * data.resolutionScale));
+    const effectiveDpr = Math.max(0.7, Math.min(1.85, Math.min(window.devicePixelRatio || 1, preset.dprCap) * data.resolutionScale));
     this.renderer.setPixelRatio(effectiveDpr);
   }
 
@@ -183,10 +186,9 @@ class SarabGame {
       this.audio.setVolume(data.volume);
       this.texManager.setAnisotropy(preset.anisotropy);
       this.sky.applySettings(data, preset);
-      this.desert.applySettings(preset);
+      this.stages.applySettings(preset);
       this.dustStorm.applySettings(data, preset);
     };
-
     apply(this.settings.data, this.settings.getPreset());
     this.settings.onChange(apply);
   }
@@ -202,23 +204,19 @@ class SarabGame {
   _animate(nowMs) {
     requestAnimationFrame((ts) => this._animate(ts));
 
-    // 1. ZERO GPU/CPU burn when tab is hidden, paused, or blocked behind modal/fullscreen gate!
     if (this.tabHidden) return;
     if (this._renderedInitialFrame && (this.paused || this.ui.isModalOpen || this.ui.isGateActive())) {
       this._lastRenderMs = nowMs;
       return;
     }
 
-    // 2. True Frame Pacer: caps 90Hz/120Hz phones to 45 FPS (or 30 FPS Cool Mode, 24 FPS Title Screen)!
-    const isMenu = this.cutscenes.mode === 'title' || this.cutscenes.mode === 'ending';
+    const isMenu = this.cutscenes.mode === 'title';
     const targetFps = isMenu ? 24 : this.settings.getEffectiveFpsCap();
     const minFrameMs = 1000 / targetFps;
 
     if (this._lastRenderMs === 0) this._lastRenderMs = nowMs - minFrameMs;
     const elapsedMs = nowMs - this._lastRenderMs;
-    if (this._renderedInitialFrame && elapsedMs < minFrameMs - 1.5) {
-      return;
-    }
+    if (this._renderedInitialFrame && elapsedMs < minFrameMs - 1.5) return;
 
     const rawDt = Math.max(0.001, elapsedMs / 1000);
     const dt = Math.min(rawDt, 0.055);
@@ -228,34 +226,33 @@ class SarabGame {
     this.elapsed += dt;
 
     if (this.cutscenes.mode === 'gameplay') {
-      const activeTarget = this.house.getActiveInteractable();
+      const activeTarget = this.stages.getActiveInteractable();
       this.player.update(dt, this.elapsed, activeTarget);
       this.ui.updateInteractPrompt(this.player.focusedInteractable);
     } else {
       this.cutscenes.update(dt, this.elapsed);
     }
 
+    this.flashlight.update(dt, this.elapsed, false);
+
     const activePos = this.cutscenes.mode === 'gameplay' ? this.player.position : this.camera.position;
     const indoor = this.cutscenes.mode === 'gameplay' ? this.player.isInsideHouse : false;
-
     const stormVal = this.dustStorm.update(
       dt,
       this.elapsed,
       this.camera,
       activePos,
       indoor,
-      this.sky.timeOfDay
+      this.journey.stageId === 2 ? 0.65 : 0.0
     );
     this.sky.setStormIntensity(stormVal);
-    this.desert.setStormIntensity(stormVal);
-    this.house.setStormIntensity(stormVal);
+    this.stages.setStormIntensity(stormVal);
     this.audio.setStormIntensity(stormVal);
 
     this.sky.update(dt, this.elapsed, this.camera, activePos, indoor);
-    this.desert.update(dt, this.elapsed, activePos, this.sky.timeOfDay);
-    this.house.update(dt, this.elapsed, this.camera, this.sky.timeOfDay);
-    this.audio.updateAmbience(dt, indoor ? 1 : 0, this.sky.timeOfDay, this.elapsed);
-    this.story.update(dt, this.cutscenes.mode === 'gameplay', activePos, this.player.yaw);
+    this.stages.update(dt, this.elapsed, activePos, this.camera);
+    this.audio.updateAmbience(dt, indoor ? 1 : 0, this.elapsed);
+    this.journey.update(dt, this.elapsed, this.cutscenes.mode === 'gameplay', activePos, this.player.yaw);
 
     this.renderer.render(this.scene, this.camera);
 
@@ -271,125 +268,76 @@ class SarabGame {
 
   _exposeDebugAPI() {
     window.__SARAB__ = {
-      showTitle: () => {
-        this.ui.dismissGateForDebug();
-        this.ui.showTitleScreen();
-      },
-      setTimeOfDay: (t) => this.sky.setTimeOfDay(t, true),
-      setStorm: (val) => {
-        this.dustStorm.setTargetIntensity(val, true);
-        this.sky.setStormIntensity(val, true);
-        this.desert.setStormIntensity(val);
-        this.house.setStormIntensity(val);
-        this.audio.setStormIntensity(val);
-      },
-      teleport: (x, z, yaw, pitch = 0, keepTime = true) => {
-        const savedTime = this.sky.timeOfDay;
-        const savedStorm = this.dustStorm.targetIntensity;
+      loadStage: async (stageId) => {
         this.ui.dismissGateForDebug();
         this.ui.hideTitleScreen();
-        this.cutscenes.mode = 'gameplay';
-        this.cutscenes.containerEl?.classList.remove('cinematic-bars-active');
-        this.story.reset();
-        if (keepTime) {
-          this.sky.setTimeOfDay(savedTime, true);
-          this.dustStorm.setTargetIntensity(savedStorm, true);
-          this.sky.setStormIntensity(savedStorm, true);
-        }
+        this.cutscenes.enterGameplay();
+        this.ui.showHUD();
+        await this.journey.transitionToStage(stageId, { immediate: true, showOverlay: false });
+      },
+      teleport: (x, z, yaw, pitch = 0) => {
+        this.ui.dismissGateForDebug();
+        this.ui.hideTitleScreen();
+        this.cutscenes.enterGameplay();
         this.ui.showHUD();
         this.player.enabled = true;
         this.player.setPose(x, z, yaw, pitch);
+        this.flashlight.update(0.016, this.elapsed, true);
       },
-      setMission: (idx) => {
-        this.story.missionIndex = idx;
-        this.story._activateCurrentMission();
+      setFlashlight: (on) => {
+        this.flashlight.setEnabled(Boolean(on), false);
+        this.flashlight.update(0.016, this.elapsed, true);
+        this.ui.setFlashlightUI(this.flashlight.enabled, this.journey.stageId === 4);
       },
-      triggerSubtitle: (text, style = 'thought') => this.story.sayImmediate(text, style),
-      testRockCollision: () => {
-        const cx = -13.5;
-        const cz = -9.5;
-        const gy = getTerrainHeight(cx, cz);
-        let maxPenetration = 0;
+      setStorm: (val) => {
+        this.dustStorm.setTargetIntensity(val, true);
+        this.sky.setStormIntensity(val, true);
+        this.stages.setStormIntensity(val);
+      },
+      triggerSubtitle: (text, style = 'thought') => this.journey.sayImmediate(text, style),
+      testCollision: () => {
+        // Test cylinder cairns & ellipse rocks & mesas & house walls in current stage
         const radius = 0.36;
-        const minExpectedDist = 1.42 + radius;
-        for (let a = 0; a < 16; a++) {
-          const ang = (a / 16) * Math.PI * 2;
-          const pos = new THREE.Vector3(cx + Math.cos(ang) * 0.5, gy, cz + Math.sin(ang) * 0.5);
-          this.physics.resolveHorizontal(pos, radius);
-          const distAfter = Math.hypot(pos.x - cx, pos.z - cz);
-          if (distAfter < minExpectedDist) {
-            maxPenetration = Math.max(maxPenetration, minExpectedDist - distAfter);
-          }
-        }
-        return { rockBlockedCleanly: maxPenetration < 0.02, maxPenetration: Number(maxPenetration.toFixed(4)) };
-      },
-      testMesaCollision: () => {
-        // Test ALL 7 mesas from 36 angles each (252 tests!) -> verify ZERO visual penetration!
-        const radius = 0.36;
-        let maxPenetration = 0;
-        let tested = 0;
-        for (const m of this.physics.mesas) {
-          for (let a = 0; a < 36; a++) {
-            const ang = (a / 36) * Math.PI * 2;
-            const testY = m.baseY + 0.5;
-            const yNorm = Math.max(0, Math.min(0.95, (testY - m.meshBottomY) / m.height));
-            const visualR = getMesaVisualRadiusAt(ang, yNorm);
-            // Place player 75% inside the visual mountain along angle `ang` in local space
-            const inLx = Math.cos(ang) * visualR * 0.75 * m.sx;
-            const inLz = Math.sin(ang) * visualR * 0.75 * m.sz;
-            // Convert local -> world via exact Three.js R_y(+ry)
-            const wx = m.x + (inLx * m.cos + inLz * m.sin);
-            const wz = m.z + (-inLx * m.sin + inLz * m.cos);
-
-            const pos = new THREE.Vector3(wx, testY, wz);
+        let maxPen = 0;
+        let checks = 0;
+        for (const c of this.physics.cylinders) {
+          for (let a = 0; a < 8; a++) {
+            const ang = (a / 8) * Math.PI * 2;
+            const gy = this.stages.getHeight(c.x, c.z);
+            const pos = new THREE.Vector3(c.x + Math.cos(ang) * (c.r * 0.4), gy, c.z + Math.sin(ang) * (c.r * 0.4));
             this.physics.resolveHorizontal(pos, radius);
-
-            // Check resulting position back in mesa local space against visual surface!
-            const rwx = pos.x - m.x;
-            const rwz = pos.z - m.z;
-            const rlx = rwx * m.cos - rwz * m.sin;
-            const rlz = rwx * m.sin + rwz * m.cos;
-            const ux = rlx / m.sx;
-            const uz = rlz / m.sz;
-            const outAng = Math.atan2(uz, ux);
-            const outVisualR = getMesaVisualRadiusAt(outAng, yNorm);
-            const outU = Math.hypot(ux, uz);
-            if (outU < outVisualR) {
-              const penMeters = (outVisualR - outU) * Math.min(m.sx, m.sz);
-              maxPenetration = Math.max(maxPenetration, penMeters);
-            }
-            tested++;
+            const d = Math.hypot(pos.x - c.x, pos.z - c.z);
+            if (d < c.r + radius - 0.02) maxPen = Math.max(maxPen, c.r + radius - d);
+            checks++;
           }
         }
         return {
-          mesasTested: this.physics.mesas.length,
-          anglesTested: tested,
-          allMesasSolid: maxPenetration < 0.01,
-          maxPenetrationMeters: Number(maxPenetration.toFixed(4)),
-        };
-      },
-      testJeepClimb: () => {
-        const jx = this.desert.jeepWorldPos.x;
-        const jz = this.desert.jeepWorldPos.z;
-        const jy = getTerrainHeight(jx, jz);
-        const roofInfo = this.physics.getGroundInfo(jx, jz, jy + 1.2);
-        return {
-          groundY: Number(jy.toFixed(2)),
-          roofStandY: Number(roofInfo.groundY.toFixed(2)),
-          canClimbJeep: roofInfo.groundY > jy + 0.8,
+          stageId: this.journey.stageId,
+          checks,
+          collidersCount:
+            this.physics.cylinders.length +
+            this.physics.ellipses.length +
+            this.physics.aabbs.length +
+            this.physics.obbs.length +
+            this.physics.mesas.length,
+          solid: maxPen < 0.03,
+          maxPen: Number(maxPen.toFixed(4)),
         };
       },
       getStats: () => ({
+        stageId: this.journey.stageId,
+        walkSpeed: this.player.walkSpeed,
+        surface: this.player.currentSurface,
+        flashlightOn: this.flashlight.enabled,
         drawCalls: this.renderer.info.render.calls,
         triangles: this.renderer.info.render.triangles,
+        geometriesInMemory: this.renderer.info.memory.geometries,
+        texturesInMemory: this.renderer.info.memory.textures,
         shadowUpdates: this.sky.shadowUpdatesCount,
         skyCacheActive: this.sky.proceduralSky.useCache,
-        fpsCap: this.settings.getEffectiveFpsCap(),
-        timeOfDay: this.sky.timeOfDay,
-        storm: Number(this.dustStorm.intensity.toFixed(2)),
-        pos: this.player.position.toArray(),
+        pos: this.player.position.toArray().map((n) => Number(n.toFixed(2))),
         indoor: this.player.isInsideHouse,
-        modelsLoaded: this.modelManager.geometries.size,
+        modelsLoaded: Array.from(this.modelManager.geometries.keys()),
       }),
     };
   }

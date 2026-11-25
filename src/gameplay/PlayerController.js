@@ -1,33 +1,31 @@
 import * as THREE from 'three';
 
 /**
- * First-Person Player Controller (v3.0):
- * - True PUBG-Style Floating Dynamic Joystick:
- *   * Inside the base ring (0..46px) = 100% smooth walking (never accidentally triggers sprint!)
- *   * Pushing thumb OUTSIDE the ring (>50px upward) = Sprint!
- *   * Dragging thumb into the top lock pill (>94px upward) and releasing = Auto-Sprint Lock with persistent HUD pill (#auto-sprint-banner)!
- * - Real Jump Physics (Gravity + Jump Button + Spacebar) with downhill ground-snapping so sprinting down sand dunes never stutters!
- * - High-sensitivity landscape mobile touch look + Desktop WASD/Mouse + subtle tactile haptics
+ * Realistic First-Person Desert Explorer Controller (v5.0):
+ * - Grounded, realistic walking speed (~3.4 m/s) & steady desert jog (~5.2 m/s) for immersive 50–100s stage walks
+ * - PUBG-Style Floating Dynamic Joystick + Sprint-Lock + Jump Button + Handheld Flashlight (`F` key + HUD button)
+ * - Surface-aware footsteps ('sand' | 'sabkha' | 'rock' | 'stone') synced directly to head-bob cadence!
  */
 export class PlayerController {
-  constructor(camera, physics, audio, settings) {
+  constructor(camera, physics, audio, settings, flashlight = null) {
     this.camera = camera;
     this.physics = physics;
     this.audio = audio;
     this.settings = settings;
+    this.flashlight = flashlight;
 
     this.enabled = false;
-    this.position = new THREE.Vector3(-11.0, 0, 15.0);
-    this.yaw = -0.34;
+    this.position = new THREE.Vector3(0, 0, 114);
+    this.yaw = 0.0;
     this.pitch = -0.02;
     this.eyeHeight = 1.72;
 
-    // Movement + Real Sprint + Jump Physics
-    this.walkSpeed = 4.55;
-    this.sprintSpeed = 8.95;
+    // Realistic slower desert exploration speeds (~3.4 m/s walk!)
+    this.walkSpeed = 3.4;
+    this.sprintSpeed = 5.2;
     this.vy = 0;
     this.gravity = -19.5;
-    this.jumpVelocity = 7.5;
+    this.jumpVelocity = 6.9;
     this.onGround = true;
     this.isJumping = false;
 
@@ -85,6 +83,7 @@ export class PlayerController {
   setPose(x, z, yaw, pitch = 0) {
     const g = this.physics.getGroundInfo(x, z, 0);
     this.position.set(x, g.groundY, z);
+    this.currentSurface = g.surface;
     this.vy = 0;
     this.onGround = true;
     this.isJumping = false;
@@ -93,6 +92,7 @@ export class PlayerController {
     this.pitch = pitch;
     this._targetYaw = yaw;
     this._targetPitch = pitch;
+    this.isInsideHouse = this.physics.isInsideBuilding(this.position);
     this._applyCameraTransform(0, 0);
   }
 
@@ -114,6 +114,9 @@ export class PlayerController {
       if (e.code === 'Space') {
         e.preventDefault();
         this.triggerJump();
+      }
+      if (e.code === 'KeyF' && !e.repeat && this.enabled && this.flashlight) {
+        this.flashlight.toggle();
       }
     });
     window.addEventListener('keyup', (e) => {
@@ -143,6 +146,19 @@ export class PlayerController {
         e.stopPropagation();
         this.triggerJump();
       });
+    }
+
+    const flashBtn = document.getElementById('btn-flashlight');
+    if (flashBtn) {
+      const handleFlash = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.enabled || !this.flashlight) return;
+        this._haptic(12);
+        this.flashlight.toggle();
+      };
+      flashBtn.addEventListener('touchstart', handleFlash, { passive: false });
+      flashBtn.addEventListener('click', handleFlash);
     }
 
     const lookZone = document.getElementById('look-zone');
@@ -178,7 +194,6 @@ export class PlayerController {
       this.mouseDragging = false;
     });
 
-    // High-sensitivity mobile touch look (right half)
     if (lookZone) {
       lookZone.addEventListener('touchstart', (e) => {
         if (!this.enabled) return;
@@ -227,14 +242,14 @@ export class PlayerController {
       lookZone.addEventListener('touchcancel', endLook, { passive: true });
     }
 
-    // ==================== TRUE PUBG FLOATING JOYSTICK + OUTER-RING SPRINT & SPRINT-LOCK ====================
+    // PUBG Floating Dynamic Joystick
     const joyZone = document.getElementById('joystick-zone');
     const floatWrap = document.getElementById('joystick-float-wrap');
     const joyBase = document.getElementById('joystick-base');
     const joyKnob = document.getElementById('joystick-knob');
     const sprintLockPill = document.getElementById('joystick-sprint-lock');
     const walkRadius = 46;
-    const sprintTriggerDist = 52; // Must push OUTSIDE the 46px walk ring to sprint!
+    const sprintTriggerDist = 52;
 
     const updateKnob = (px, py, sprinting, lockHovered) => {
       if (joyKnob) joyKnob.style.transform = `translate(${px.toFixed(1)}px, ${py.toFixed(1)}px)`;
@@ -252,7 +267,7 @@ export class PlayerController {
             this.joyActive = true;
             this.joyBeyondRing = false;
             this.joyLockHover = false;
-            this.setAutoSprintLock(false); // Touching stick cancels previous auto-sprint lock
+            this.setAutoSprintLock(false);
             this.joyOrigin.x = t.clientX;
             this.joyOrigin.y = t.clientY;
             floatWrap.style.left = `${t.clientX}px`;
@@ -272,11 +287,9 @@ export class PlayerController {
             const rawDy = t.clientY - this.joyOrigin.y;
             const dist = Math.hypot(rawDx, rawDy);
 
-            // True PUBG Sprint: ONLY when dragged outside the 46px walk ring in the forward sector!
             const inForwardCone = rawDy < -36 && Math.abs(rawDx) < Math.abs(rawDy) * 0.85;
             this.joyBeyondRing = dist > sprintTriggerDist && inForwardCone;
 
-            // PUBG Sprint-Lock zone: dragging thumb high into top lock pill (rawDy < -92px)
             const prevLockHover = this.joyLockHover;
             this.joyLockHover = rawDy < -92 && Math.abs(rawDx) < 56;
             if (this.joyLockHover && !prevLockHover) this._haptic(16);
@@ -354,9 +367,7 @@ export class PlayerController {
     if (this.joyActive) {
       moveForward -= this.joyVec.y;
       moveRight += this.joyVec.x;
-      if (this.joyBeyondRing || this.joyLockHover) {
-        joySprinting = true;
-      }
+      if (this.joyBeyondRing || this.joyLockHover) joySprinting = true;
     } else if (this.autoSprintLocked) {
       moveForward = 1;
       joySprinting = true;
@@ -366,9 +377,9 @@ export class PlayerController {
     this.isActuallySprinting =
       (this.isSprintingKey || joySprinting) && inputMag > 0.3 && moveForward > 0.15;
 
-    // Smooth Dynamic FOV rush (+8.0°) when sprinting
-    const targetFovBoost = this.isActuallySprinting ? 8.0 : 0;
-    this.currentFovBoost += (targetFovBoost - this.currentFovBoost) * Math.min(1, dt * 7.5);
+    // Gentle FOV widen (+5.0°) when jogging
+    const targetFovBoost = this.isActuallySprinting ? 5.0 : 0;
+    this.currentFovBoost += (targetFovBoost - this.currentFovBoost) * Math.min(1, dt * 6.5);
     const desiredFov = this.settings.data.fov + this.currentFovBoost;
     if (Math.abs(this.camera.fov - desiredFov) > 0.05) {
       this.camera.fov = desiredFov;
@@ -400,12 +411,11 @@ export class PlayerController {
       }
     }
 
-    // Vertical Physics: Gravity, Jumping, and Downhill Ground-Snapping (zero downhill stutter!)
     const ground = this.physics.getGroundInfo(this.position.x, this.position.z, this.position.y);
     this.currentSurface = ground.surface;
     const heightAboveGround = this.position.y - ground.groundY;
 
-    if (this.isJumping || !this.onGround || heightAboveGround > 0.38) {
+    if (this.isJumping || !this.onGround || heightAboveGround > 0.42) {
       this.onGround = false;
       this.vy += this.gravity * dt;
       this.position.y += this.vy * dt;
@@ -419,21 +429,20 @@ export class PlayerController {
         this.isJumping = false;
       }
     } else {
-      // Smoothly glue feet to sand dunes both uphill AND downhill when walking/sprinting!
-      this.position.y += (ground.groundY - this.position.y) * Math.min(1, dt * 24);
+      this.position.y += (ground.groundY - this.position.y) * Math.min(1, dt * 22);
       this.vy = 0;
       this.onGround = true;
     }
 
     this.isInsideHouse = this.physics.isInsideBuilding(this.position);
 
-    // Walking / Sprinting Head-Bob & Footsteps
+    // Realistic slower head-bob & surface-aware footsteps calibrated for 3.4 m/s walking!
     let bobY = 0;
     let bobX = 0;
-    if (this.onGround && movingSpeed > 0.35) {
-      const freq = this.isActuallySprinting ? 12.8 : 7.6;
-      const ampY = this.isActuallySprinting ? 0.082 : 0.042;
-      const ampX = this.isActuallySprinting ? 0.04 : 0.02;
+    if (this.onGround && movingSpeed > 0.3) {
+      const freq = this.isActuallySprinting ? 9.4 : 6.2;
+      const ampY = this.isActuallySprinting ? 0.062 : 0.036;
+      const ampX = this.isActuallySprinting ? 0.03 : 0.018;
       this.bobTimer += dt * freq;
       const sinVal = Math.sin(this.bobTimer);
       bobY = sinVal * ampY;
@@ -444,7 +453,7 @@ export class PlayerController {
       }
       this.lastStepSign = sinVal;
     } else if (this.onGround) {
-      bobY = Math.sin(elapsed * 1.45) * 0.011;
+      bobY = Math.sin(elapsed * 1.35) * 0.01;
       this.lastStepSign = 0;
     }
 
@@ -461,7 +470,7 @@ export class PlayerController {
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
-    this.camera.rotation.z = bobX * (this.isActuallySprinting ? -0.28 : -0.14);
+    this.camera.rotation.z = bobX * (this.isActuallySprinting ? -0.22 : -0.12);
   }
 
   _updateActiveInteractable(activeItem) {
@@ -469,16 +478,14 @@ export class PlayerController {
       this.focusedInteractable = null;
       return;
     }
-
     const dist = this.camera.position.distanceTo(activeItem.worldPos);
     if (dist > activeItem.radius) {
       this.focusedInteractable = null;
       return;
     }
-
     this.camera.getWorldDirection(this._forward);
     this._toObj.subVectors(activeItem.worldPos, this.camera.position).normalize();
     const dot = this._forward.dot(this._toObj);
-    this.focusedInteractable = dot > 0.52 || dist < 2.2 ? activeItem : null;
+    this.focusedInteractable = dot > 0.45 || dist < 2.6 ? activeItem : null;
   }
 }

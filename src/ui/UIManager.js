@@ -1,6 +1,8 @@
 /**
- * Orchestrates Mandatory Fullscreen Gate, Title Screen, Ultra-Clean Single-Mission HUD,
- * Settings Modal, Inspection Cards, Ending Screen, and Orientation Hints.
+ * SARAB v5.0 UI Manager:
+ * - Mandatory Fullscreen Gate, Title Screen, Ultra-Clean Single-Objective HUD
+ * - On-Screen Flashlight Toggle Button (highlighted at Night Stage 4) + Stage Selector
+ * - Settings Modal, Controls Guide, Ending Screen, and Orientation Hints
  */
 export class UIManager {
   constructor(settings, audio) {
@@ -12,7 +14,6 @@ export class UIManager {
     this.hudLayer = document.getElementById('hud-layer');
     this.settingsModal = document.getElementById('settings-modal');
     this.controlsModal = document.getElementById('controls-modal');
-    this.inspectModal = document.getElementById('inspect-modal');
     this.endingScreen = document.getElementById('ending-screen');
     this.portraitWarning = document.getElementById('portrait-warning');
 
@@ -26,6 +27,7 @@ export class UIManager {
     this.reticleDot = document.getElementById('reticle-dot');
     this.mobileInteractBtn = document.getElementById('btn-mobile-interact');
     this.mobileInteractText = document.getElementById('mobile-interact-text');
+    this.flashlightBtn = document.getElementById('btn-flashlight');
     this.restoreFsBtn = document.getElementById('btn-restore-fs');
     this.returnTitleBtn = document.getElementById('btn-return-title');
 
@@ -34,9 +36,9 @@ export class UIManager {
     this.onPauseToggle = null;
     this.onReturnToTitle = null;
     this.onFreeRoam = null;
-    this.onReplayChapter = null;
+    this.onReplayJourney = null;
+    this.onSelectStage = null;
 
-    this._inspectCloseCb = null;
     this._portraitDismissed = false;
     this.isModalOpen = false;
     this.inGameplay = false;
@@ -60,7 +62,7 @@ export class UIManager {
         await screen.orientation.lock('landscape').catch(() => {});
       }
     } catch {
-      // Graceful fallback on browsers that block programmatic fullscreen (e.g., iOS Safari)
+      // Graceful fallback
     }
 
     this.fullscreenGate?.classList.remove('active');
@@ -76,9 +78,7 @@ export class UIManager {
     document.addEventListener('fullscreenchange', syncFsButton);
     document.addEventListener('webkitfullscreenchange', syncFsButton);
 
-    this.restoreFsBtn?.addEventListener('click', () => {
-      this.enterMandatoryFullscreen();
-    });
+    this.restoreFsBtn?.addEventListener('click', () => this.enterMandatoryFullscreen());
   }
 
   _bindButtons() {
@@ -88,7 +88,6 @@ export class UIManager {
 
     document.getElementById('btn-start-game')?.addEventListener('click', () => {
       this.audio.unlock();
-      // Re-assert fullscreen on game start if not already active
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
@@ -118,6 +117,19 @@ export class UIManager {
       this.onReturnToTitle?.();
     });
 
+    // Quick Stage Jump buttons inside Settings & Ending screen
+    document.querySelectorAll('[data-jump-stage]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetStage = Number(btn.dataset.jumpStage);
+        closeSettings();
+        this.endingScreen?.classList.add('hidden');
+        this.endingScreen?.classList.remove('active');
+        this.hideTitleScreen();
+        this.showHUD();
+        this.onSelectStage?.(targetStage);
+      });
+    });
+
     document.getElementById('btn-open-controls')?.addEventListener('click', () => {
       this.controlsModal?.classList.remove('hidden');
       this.isModalOpen = true;
@@ -128,15 +140,6 @@ export class UIManager {
     };
     document.getElementById('btn-close-controls')?.addEventListener('click', closeControls);
     document.getElementById('btn-ok-controls')?.addEventListener('click', closeControls);
-
-    document.getElementById('btn-close-inspect')?.addEventListener('click', () => {
-      this.inspectModal?.classList.add('hidden');
-      this.isModalOpen = false;
-      const cb = this._inspectCloseCb;
-      this._inspectCloseCb = null;
-      this.onPauseToggle?.(false);
-      cb?.();
-    });
 
     this.mobileInteractBtn?.addEventListener('click', () => this.onInteract?.());
 
@@ -150,7 +153,7 @@ export class UIManager {
     document.getElementById('btn-replay-chapter')?.addEventListener('click', () => {
       this.endingScreen?.classList.add('hidden');
       this.endingScreen?.classList.remove('active');
-      this.onReplayChapter?.();
+      this.onReplayJourney?.();
     });
 
     document.getElementById('btn-dismiss-portrait')?.addEventListener('click', () => {
@@ -195,7 +198,6 @@ export class UIManager {
         if (out) out.textContent = fmt(num);
       });
     };
-
     bindRange('opt-sensitivity', 'sensitivity', 'val-sensitivity', (v) => `${v.toFixed(1)}x`);
     bindRange('opt-resolution', 'resolutionScale', 'val-resolution', (v) => `${Math.round(v * 100)}%`);
     bindRange('opt-fov', 'fov', 'val-fov', (v) => `${Math.round(v)}°`);
@@ -277,7 +279,7 @@ export class UIManager {
 
   hideTitleScreen() {
     this.titleScreen?.classList.remove('active');
-    setTimeout(() => this.titleScreen?.classList.add('hidden'), 450);
+    setTimeout(() => this.titleScreen?.classList.add('hidden'), 420);
   }
 
   showHUD() {
@@ -299,22 +301,18 @@ export class UIManager {
     if (fromGameplay) this.onPauseToggle?.(true);
   }
 
-  openInspectModal(tag, title, body, onClose) {
-    if (document.pointerLockElement) document.exitPointerLock?.();
-    document.getElementById('inspect-tag').textContent = tag;
-    document.getElementById('inspect-title').textContent = title;
-    document.getElementById('inspect-body').textContent = body;
-    this._inspectCloseCb = onClose;
-    this.inspectModal?.classList.remove('hidden');
-    this.isModalOpen = true;
-    this.onPauseToggle?.(true);
-  }
-
   showEndingScreen() {
     this.inGameplay = false;
     this.hideHUD();
     this.endingScreen?.classList.remove('hidden');
     requestAnimationFrame(() => this.endingScreen?.classList.add('active'));
+  }
+
+  setFlashlightUI(isOn, isNightStage) {
+    if (!this.flashlightBtn) return;
+    this.flashlightBtn.classList.toggle('active', Boolean(isOn));
+    this.flashlightBtn.classList.toggle('night-emphasis', Boolean(isNightStage));
+    this.flashlightBtn.setAttribute('aria-pressed', String(Boolean(isOn)));
   }
 
   updateMission(text, distText, arrowDeg = null) {
@@ -354,17 +352,15 @@ export class UIManager {
     }
   }
 
-  updateClock(clockText, timeOfDay) {
+  updateClock(clockText, stageId, icon = '☀') {
     if (this.clockEl && this._lastClockText !== clockText) {
       this._lastClockText = clockText;
       this.clockEl.textContent = clockText;
     }
     if (this.sunIconEl) {
-      const col = timeOfDay > 0.65 ? '#ff9d42' : '#ffe08a';
-      if (this._lastSunColor !== col) {
-        this._lastSunColor = col;
-        this.sunIconEl.style.color = col;
-      }
+      this.sunIconEl.textContent = icon;
+      const col = stageId === 4 ? '#a6c8ff' : stageId === 3 ? '#ff7d47' : stageId === 2 ? '#ffb85c' : '#ffe28a';
+      this.sunIconEl.style.color = col;
     }
   }
 

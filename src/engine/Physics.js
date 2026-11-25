@@ -1,37 +1,52 @@
-import { getMesaVisualRadiusAt } from '../world/TerrainMath.js';
+import { getMesaVisualRadiusAt } from '../world/StageTerrain.js';
 
 /**
- * Precision First-Person Physics Solver (v4.1):
- * - 100% Visual-Physics Terrain Triangle Parity (via TerrainMath.getTerrainHeight)
- * - Exact Three.js Y-rotation inverse transform (world->local uses R_y(-ry), local->world uses R_y(+ry))
- * - Exact 1:1 Sandstone Mesa/Mountain Collision via shared `getMesaVisualRadiusAt(ang, yNorm)` -> ZERO walking inside mountains from any angle!
- * - Exact rotated-ellipse & OBB colliders for rocks, buried Jeep, furniture, and walls (climbable top surfaces!)
- * - Slope angle limiting (>43° steep cliffs push player back smoothly)
+ * Precision First-Person Multi-Stage Physics Solver (v5.0):
+ * - 100% Visual-Physics Terrain Triangle Parity per Stage
+ * - Clean `clear()` method when unloading previous stages from memory
+ * - Exact 1:1 Sandstone Mesa/Cliff Collision, Rotated-Ellipse Rock Colliders, OBB & AABB Walls
+ * - Dynamic Surface Type Detection ('sand' | 'sabkha' | 'rock' | 'stone') for stage-aware footsteps!
+ * - Steep slope limiter so player stays naturally on mountain trails and inside canyon walls!
  */
 export class PhysicsWorld {
-  constructor(heightSampler) {
+  constructor(heightSampler, surfaceSampler = null) {
     this.getTerrainHeight = heightSampler;
-    this.aabbs = [];          // { minX, maxX, minZ, maxZ, minY, maxY, climbable }
-    this.obbs = [];           // { x, z, hx, hz, cos, sin, minY, maxY, hoodY, climbable }
-    this.cylinders = [];      // { x, z, r, maxY, climbable }
-    this.ellipses = [];       // { x, z, rx, rz, cos, sin, topY, climbable }
-    this.mesas = [];          // { x, z, sx, sz, cos, sin, baseY, meshBottomY, height }
-    this.floorZones = [];     // { minX, maxX, minZ, maxZ, y, surface }
-    this.interiorZones = [];  // { minX, maxX, minZ, maxZ, minY, maxY }
-    this.worldRadius = 176;
+    this.getTerrainSurface = surfaceSampler || (() => 'sand');
+    this.aabbs = [];
+    this.obbs = [];
+    this.cylinders = [];
+    this.ellipses = [];
+    this.mesas = [];
+    this.floorZones = [];
+    this.interiorZones = [];
+    this.bounds = { type: 'circle', radius: 176 };
+    this.maxSlope = 0.94;
   }
 
-  addBoxCollider(minX, maxX, minZ, maxZ, minY = -10, maxY = 14, forceClimbable = null) {
-    const climbable = forceClimbable !== null ? forceClimbable : maxY <= 2.35;
+  clear() {
+    this.aabbs.length = 0;
+    this.obbs.length = 0;
+    this.cylinders.length = 0;
+    this.ellipses.length = 0;
+    this.mesas.length = 0;
+    this.floorZones.length = 0;
+    this.interiorZones.length = 0;
+  }
+
+  configureStage({ heightSampler, surfaceSampler, bounds, maxSlope = 0.94 }) {
+    this.clear();
+    if (heightSampler) this.getTerrainHeight = heightSampler;
+    this.getTerrainSurface = surfaceSampler || (() => 'sand');
+    this.bounds = bounds || { type: 'circle', radius: 176 };
+    this.maxSlope = maxSlope;
+  }
+
+  addBoxCollider(minX, maxX, minZ, maxZ, minY = -20, maxY = 120, forceClimbable = null) {
+    const climbable = forceClimbable !== null ? forceClimbable : maxY <= 2.2;
     this.aabbs.push({ minX, maxX, minZ, maxZ, minY, maxY, climbable });
   }
 
-  /**
-   * Oriented Bounding Box (OBB) collider for rotated rectangular vehicles/structures like the buried 4x4 Jeep!
-   * Three.js R_y(ry) maps local (lx,lz) -> world (lx*cos + lz*sin, -lx*sin + lz*cos),
-   * so inverse world->local is (wx*cos - wz*sin, wx*sin + wz*cos) with cos=cos(ry), sin=sin(ry).
-   */
-  addOBBCollider(x, z, hx, hz, rotY = 0, minY = -5, maxY = 2.0, hoodY = null, climbable = true) {
+  addOBBCollider(x, z, hx, hz, rotY = 0, minY = -20, maxY = 120, climbable = false) {
     this.obbs.push({
       x,
       z,
@@ -41,21 +56,20 @@ export class PhysicsWorld {
       sin: Math.sin(rotY),
       minY,
       maxY,
-      hoodY: hoodY !== null ? hoodY : maxY,
       climbable,
     });
   }
 
-  addCylinderCollider(x, z, r, maxY = 12) {
-    this.cylinders.push({ x, z, r: r * 0.96, maxY, climbable: maxY < 2.2 });
+  addCylinderCollider(x, z, r, maxY = 120, climbable = false) {
+    this.cylinders.push({ x, z, r: Math.max(0.2, r * 0.96), maxY, climbable });
   }
 
   addEllipseCollider(x, z, rx, rz, rotY = 0, topY = 1.5, climbable = true) {
     this.ellipses.push({
       x,
       z,
-      rx: Math.max(0.28, rx * 0.98),
-      rz: Math.max(0.28, rz * 0.98),
+      rx: Math.max(0.26, rx * 0.98),
+      rz: Math.max(0.26, rz * 0.98),
       cos: Math.cos(rotY),
       sin: Math.sin(rotY),
       topY,
@@ -63,10 +77,6 @@ export class PhysicsWorld {
     });
   }
 
-  /**
-   * Exact 1:1 solid desert mesa / mountain collider — uses the exact visual mesh scale,
-   * rotation, bottom offset (-4.5), and `getMesaVisualRadiusAt(ang, yNorm)`!
-   */
   addMesaCollider(x, z, sx, sz, rotY = 0, baseY = 0, height = 25) {
     this.mesas.push({
       x,
@@ -86,17 +96,13 @@ export class PhysicsWorld {
     this.floorZones.push({ minX, maxX, minZ, maxZ, y, surface });
   }
 
-  addInteriorZone(minX, maxX, minZ, maxZ, minY = -1, maxY = 7) {
+  addInteriorZone(minX, maxX, minZ, maxZ, minY = -5, maxY = 12) {
     this.interiorZones.push({ minX, maxX, minZ, maxZ, minY, maxY });
   }
 
-  /**
-   * Exact mesa collision radius in normalized local space at angle `ang` and player height `playerY`.
-   */
   _getMesaBlockingRadiusU(m, ang, playerY) {
     const yFeet = Math.max(0, Math.min(0.95, (playerY - m.meshBottomY) / m.height));
     const yHead = Math.max(0, Math.min(0.95, (playerY + 1.5 - m.meshBottomY) / m.height));
-    // Take maximum visual radius between feet & head height + tiny safety margin for 16-seg cylinder chords
     const rFeet = getMesaVisualRadiusAt(ang, yFeet);
     const rMid = getMesaVisualRadiusAt(ang, (yFeet + yHead) * 0.5);
     const rHead = getMesaVisualRadiusAt(ang, yHead);
@@ -105,27 +111,27 @@ export class PhysicsWorld {
 
   getGroundInfo(x, z, playerY = 0) {
     let groundY = this.getTerrainHeight(x, z);
-    let surface = 'sand';
-    const stepReach = playerY + 0.58;
+    let surface = this.getTerrainSurface(x, z);
+    const stepReach = playerY + 0.56;
 
-    // 1. Stone interior & porch floors
+    // 1. Stone interior & ruin floors
     for (let i = 0; i < this.floorZones.length; i++) {
       const f = this.floorZones[i];
       if (x >= f.minX && x <= f.maxX && z >= f.minZ && z <= f.maxZ) {
-        if (f.y >= groundY - 0.22) {
+        if (f.y >= groundY - 0.25) {
           groundY = Math.max(groundY, f.y);
           surface = f.surface;
         }
       }
     }
 
-    // 2. Climbable rocks (smooth domed top when player steps or jumps onto rock!)
+    // 2. Climbable rocks
     for (let i = 0; i < this.ellipses.length; i++) {
       const e = this.ellipses[i];
       if (!e.climbable) continue;
       const wx = x - e.x;
       const wz = z - e.z;
-      const maxR = Math.max(e.rx, e.rz) + 0.28;
+      const maxR = Math.max(e.rx, e.rz) + 0.26;
       if (wx * wx + wz * wz > maxR * maxR) continue;
 
       const lx = wx * e.cos - wz * e.sin;
@@ -137,12 +143,12 @@ export class PhysicsWorld {
         const domeTop = groundY + (e.topY - groundY) * Math.sqrt(Math.max(0, 1.0 - d2 * 0.55));
         if (domeTop <= stepReach && domeTop > groundY) {
           groundY = domeTop;
-          surface = 'stone';
+          surface = 'rock';
         }
       }
     }
 
-    // 3. Climbable Oriented Bounding Boxes (Buried 4x4 Jeep hood -> roof!)
+    // 3. Climbable OBBs
     for (let i = 0; i < this.obbs.length; i++) {
       const o = this.obbs[i];
       if (!o.climbable) continue;
@@ -150,20 +156,19 @@ export class PhysicsWorld {
       const wz = z - o.z;
       const lx = wx * o.cos - wz * o.sin;
       const lz = wx * o.sin + wz * o.cos;
-      if (Math.abs(lx) <= o.hx + 0.16 && Math.abs(lz) <= o.hz + 0.16) {
-        const surfY = lz > 0.25 ? o.hoodY : o.maxY;
-        if (surfY <= stepReach && surfY > groundY) {
-          groundY = surfY;
+      if (Math.abs(lx) <= o.hx + 0.14 && Math.abs(lz) <= o.hz + 0.14) {
+        if (o.maxY <= stepReach && o.maxY > groundY) {
+          groundY = o.maxY;
           surface = 'stone';
         }
       }
     }
 
-    // 4. Climbable AABB boxes (crates, low courtyard walls, tables)
+    // 4. Climbable AABBs (crates, low ruin walls)
     for (let i = 0; i < this.aabbs.length; i++) {
       const b = this.aabbs[i];
       if (!b.climbable) continue;
-      if (x >= b.minX - 0.15 && x <= b.maxX + 0.15 && z >= b.minZ - 0.15 && z <= b.maxZ + 0.15) {
+      if (x >= b.minX - 0.14 && x <= b.maxX + 0.14 && z >= b.minZ - 0.14 && z <= b.maxZ + 0.14) {
         if (b.maxY <= stepReach && b.maxY > groundY) {
           groundY = b.maxY;
           surface = 'stone';
@@ -193,16 +198,32 @@ export class PhysicsWorld {
     let hitBoundary = false;
 
     for (let pass = 0; pass < 3; pass++) {
-      // Clamp to playable valley FIRST so the outer world boundary can NEVER pull the player into a mountain!
-      const distFromOrigin = Math.hypot(pos.x, pos.z);
-      if (distFromOrigin > this.worldRadius) {
-        const scale = this.worldRadius / distFromOrigin;
-        pos.x *= scale;
-        pos.z *= scale;
-        hitBoundary = true;
+      // Stage playable bounds
+      const bnd = this.bounds;
+      if (bnd.type === 'box') {
+        if (pos.x < bnd.minX) { pos.x = bnd.minX; hitBoundary = true; }
+        else if (pos.x > bnd.maxX) { pos.x = bnd.maxX; hitBoundary = true; }
+        if (pos.z < bnd.minZ) { pos.z = bnd.minZ; hitBoundary = true; }
+        else if (pos.z > bnd.maxZ) { pos.z = bnd.maxZ; hitBoundary = true; }
+      } else if (bnd.type === 'corridor') {
+        if (pos.z < bnd.minZ) { pos.z = bnd.minZ; hitBoundary = true; }
+        else if (pos.z > bnd.maxZ) { pos.z = bnd.maxZ; hitBoundary = true; }
+        const cx = bnd.centerXFn(pos.z);
+        const halfW = bnd.halfWidthFn(pos.z);
+        if (pos.x < cx - halfW) { pos.x = cx - halfW; hitBoundary = true; }
+        else if (pos.x > cx + halfW) { pos.x = cx + halfW; hitBoundary = true; }
+      } else {
+        const distFromOrigin = Math.hypot(pos.x, pos.z);
+        const maxR = bnd.radius || 176;
+        if (distFromOrigin > maxR) {
+          const scale = maxR / distFromOrigin;
+          pos.x *= scale;
+          pos.z *= scale;
+          hitBoundary = true;
+        }
       }
 
-      // 1. Walls & AABB boxes
+      // 1. AABB walls & blocks
       for (let i = 0; i < this.aabbs.length; i++) {
         const b = this.aabbs[i];
         const cutoff = b.climbable ? stepCutoff : pos.y + 0.18;
@@ -234,16 +255,16 @@ export class PhysicsWorld {
         }
       }
 
-      // 2. Oriented Bounding Boxes (Buried 4x4 Jeep — exact Three.js R_y inverse + climbable hood/roof!)
+      // 2. Oriented Bounding Boxes (rotated ruin walls / stone arches)
       for (let i = 0; i < this.obbs.length; i++) {
         const o = this.obbs[i];
+        if (o.climbable && o.maxY <= stepCutoff) continue;
+        if (pos.y + 1.68 < o.minY) continue;
+
         const wx = pos.x - o.x;
         const wz = pos.z - o.z;
         const lx = wx * o.cos - wz * o.sin;
         const lz = wx * o.sin + wz * o.cos;
-
-        const localTopY = lz > 0.25 ? o.hoodY : o.maxY;
-        if (o.climbable && localTopY <= stepCutoff) continue;
 
         const closestLx = Math.max(-o.hx, Math.min(lx, o.hx));
         const closestLz = Math.max(-o.hz, Math.min(lz, o.hz));
@@ -270,16 +291,16 @@ export class PhysicsWorld {
             else if (m === penB) outLz = -o.hz - radius;
             else outLz = o.hz + radius;
           }
-          // Exact Three.js R_y(+ry): wx = lx*cos + lz*sin, wz = -lx*sin + lz*cos
           pos.x = o.x + (outLx * o.cos + outLz * o.sin);
           pos.z = o.z + (-outLx * o.sin + outLz * o.cos);
         }
       }
 
-      // 3. Cylinders (posts, palm trunks, well)
+      // 3. Cylinders (cairns, palm trunks, stone pillars, well)
       for (let i = 0; i < this.cylinders.length; i++) {
         const c = this.cylinders[i];
-        if (c.maxY <= stepCutoff) continue;
+        if (c.climbable && c.maxY <= stepCutoff) continue;
+        if (c.maxY <= pos.y + 0.15) continue;
         const dx = pos.x - c.x;
         const dz = pos.z - c.z;
         const minDist = radius + c.r;
@@ -292,7 +313,7 @@ export class PhysicsWorld {
         }
       }
 
-      // 4. Exact-Fit Rock Colliders (exact R_y inverse + smooth tangential slide!)
+      // 4. Exact-Fit Rotated Ellipse Rock Colliders
       for (let i = 0; i < this.ellipses.length; i++) {
         const e = this.ellipses[i];
         if (e.climbable && e.topY <= stepCutoff) continue;
@@ -319,7 +340,7 @@ export class PhysicsWorld {
         }
       }
 
-      // 5. Exact 1:1 Solid Sandstone Mesas / Mountains (0cm penetration from ALL 360° angles!)
+      // 5. Exact 1:1 Solid Sandstone Mesas & Cliff Pillars
       for (let i = 0; i < this.mesas.length; i++) {
         const m = this.mesas[i];
         const wx = pos.x - m.x;
@@ -327,11 +348,8 @@ export class PhysicsWorld {
         const broad = m.broadR + radius;
         if (wx * wx + wz * wz > broad * broad) continue;
 
-        // Exact Three.js world -> local inverse R_y(-ry)
         const lx = wx * m.cos - wz * m.sin;
         const lz = wx * m.sin + wz * m.cos;
-
-        // Unscaled cylinder coordinates matching DesertWorld mesaGeo before (sx, sy, sz) scaling!
         const ux = lx / m.sx;
         const uz = lz / m.sz;
         const uDist = Math.hypot(ux, uz);
@@ -346,20 +364,19 @@ export class PhysicsWorld {
           const dirZ = uDist > 1e-6 ? uz / uDist : 0;
           const outLx = dirX * minU * m.sx;
           const outLz = dirZ * minU * m.sz;
-          // Exact Three.js local -> world R_y(+ry)
           pos.x = m.x + (outLx * m.cos + outLz * m.sin);
           pos.z = m.z + (-outLx * m.sin + outLz * m.cos);
         }
       }
     }
 
-    // 6. Steep terrain slope limiter (>42° slope pushes back gently so player cannot walk up vertical cliffs)
-    const eps = 0.4;
+    // 6. Steep terrain slope limiter
+    const eps = 0.45;
     const dhx = (this.getTerrainHeight(pos.x + eps, pos.z) - this.getTerrainHeight(pos.x - eps, pos.z)) / (2 * eps);
     const dhz = (this.getTerrainHeight(pos.x, pos.z + eps) - this.getTerrainHeight(pos.x, pos.z - eps)) / (2 * eps);
     const slopeMag = Math.hypot(dhx, dhz);
-    if (slopeMag > 0.92) {
-      const pushBack = (slopeMag - 0.92) * 0.35;
+    if (slopeMag > this.maxSlope) {
+      const pushBack = (slopeMag - this.maxSlope) * 0.38;
       pos.x -= (dhx / slopeMag) * pushBack;
       pos.z -= (dhz / slopeMag) * pushBack;
     }

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { IS_MOBILE } from './Settings.js';
+import { bakeRockContactAO } from './BakedAO.js';
 
 /**
  * Loads pre-processed real Poly Haven CC0 photogrammetry 3D scans
  * from ultra-compact binary buffers (`public/models/<name>.bin` + `manifest.json`)
  * and 512x512 WebP Diffuse/Normal maps.
+ * v5.0: Bakes Ground-Contact & Underside Crevice AO directly into rock/prop geometries!
  */
 export class ModelManager {
   constructor() {
@@ -55,7 +57,7 @@ export class ModelManager {
       normals[i * 3 + 2] = floatData[base + 5];
 
       uvs[i * 2] = floatData[base + 6];
-      uvs[i * 2 + 1] = 1.0 - floatData[base + 7]; // glTF V is top-down; flip for Three.js TextureLoader default flipY=true
+      uvs[i * 2 + 1] = 1.0 - floatData[base + 7];
     }
 
     const geo = new THREE.BufferGeometry();
@@ -66,26 +68,34 @@ export class ModelManager {
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
-    const isMetallic = name === 'compass' || name === 'lantern';
+    // Bake Contact AO directly into scanned rocks & grounded props (zero runtime cost!)
+    const isRock = name.startsWith('rock');
+    bakeRockContactAO(geo, {
+      bottomAO: isRock ? 0.56 : 0.70,
+      topLift: isRock ? 1.04 : 1.01,
+      undersideAO: isRock ? 0.24 : 0.16,
+    });
+
+    const isMetallic = name === 'lantern';
     const mat = IS_MOBILE && !isMetallic
       ? new THREE.MeshLambertMaterial({
           map: diffTex || null,
           normalMap: norTex || null,
-          normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
-          side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
+          normalScale: new THREE.Vector2(isRock ? 0.82 : 0.72, isRock ? 0.82 : 0.72),
+          vertexColors: true,
+          side: isRock ? THREE.DoubleSide : THREE.FrontSide,
         })
       : new THREE.MeshStandardMaterial({
           map: diffTex || null,
           normalMap: norTex || null,
-          normalScale: new THREE.Vector2(name.startsWith('rock') ? 0.78 : 0.72, name.startsWith('rock') ? 0.78 : 0.72),
-          roughness: isMetallic ? 0.58 : 0.88,
-          metalness: isMetallic ? 0.42 : 0.04,
-          side: name.startsWith('rock') ? THREE.DoubleSide : THREE.FrontSide,
+          normalScale: new THREE.Vector2(isRock ? 0.82 : 0.72, isRock ? 0.82 : 0.72),
+          roughness: isMetallic ? 0.52 : 0.88,
+          metalness: isMetallic ? 0.45 : 0.04,
+          vertexColors: true,
+          side: isRock ? THREE.DoubleSide : THREE.FrontSide,
         });
     mat.name = `scan_${name}`;
 
-    // Re-tint the blue/white painted table & chair photogrammetry scans into sun-bleached weathered desert wood
-    // (preserves real wood grain luminance & normal detail while removing the bright blue/white paint!)
     if (name === 'table' || name === 'chair') {
       mat.onBeforeCompile = (shader) => {
         shader.fragmentShader = shader.fragmentShader.replace(
@@ -99,9 +109,8 @@ export class ModelManager {
         );
       };
       mat.customProgramCacheKey = () => `scan_wood_retint_${name}`;
-    } else if (name.startsWith('rock')) {
-      // Gently warm & dust-coat rock scans so they blend naturally with Arabian desert sand
-      mat.color.set('#d8c4a6');
+    } else if (isRock) {
+      mat.color.set('#e8d8be');
     }
 
     this.geometries.set(name, geo);
@@ -132,8 +141,11 @@ export class ModelManager {
     return this.materials.get(name) || null;
   }
 
-  getMeta(name) {
-    return this.manifest[name] || null;
+  getSharedSets() {
+    return {
+      geometries: new Set(this.geometries.values()),
+      materials: new Set(this.materials.values()),
+    };
   }
 
   createMesh(name, scale = 1.0) {
