@@ -35,24 +35,6 @@
     "hasDiff": true,
     "hasNor": true
   },
-  "compass": {
-    "name": "compass",
-    "source": "Poly Haven CC0 (seadogs_compass)",
-    "verts": 1573,
-    "tris": 1910,
-    "bmin": [
-      -0.324,
-      0.009,
-      -0.5
-    ],
-    "bmax": [
-      0.325,
-      0.18,
-      0.5
-    ],
-    "hasDiff": true,
-    "hasNor": true
-  },
   "crate": {
     "name": "crate",
     "source": "Poly Haven CC0 (wooden_crate_01)",
@@ -139,42 +121,6 @@
       0.5,
       3.644,
       0.5
-    ],
-    "hasDiff": true,
-    "hasNor": true
-  },
-  "jug": {
-    "name": "jug",
-    "source": "Poly Haven CC0 (jug_01)",
-    "verts": 1321,
-    "tris": 2281,
-    "bmin": [
-      -0.5,
-      0.0,
-      -0.304
-    ],
-    "bmax": [
-      0.5,
-      0.768,
-      0.304
-    ],
-    "hasDiff": true,
-    "hasNor": true
-  },
-  "tyre": {
-    "name": "tyre",
-    "source": "Poly Haven CC0 (old_tyre)",
-    "verts": 1239,
-    "tris": 1703,
-    "bmin": [
-      -0.5,
-      0.0,
-      -0.137
-    ],
-    "bmax": [
-      0.5,
-      1.0,
-      0.137
     ],
     "hasDiff": true,
     "hasNor": true
