@@ -5,13 +5,11 @@ import { createBakedArchitecturalBox, disposeHierarchy } from '../engine/BakedAO
 import { IS_MOBILE } from '../engine/Settings.js';
 
 /**
- * Night Sanctuary — The Abandoned Desert Estate (v5.0 Stage 4)
- * - Completely cleaned of the old story (compass, jeep, canteen, journal, radio, cellar hatch)
- *   and the old Jug/Vase 3D model!
- * - Enhanced with Baked Corner/Edge & Ground-Junction Contact AO on all adobe walls, buttresses,
- *   courtyard walls, and interior stone floor!
- * - Warm flickering oil lanterns illuminate the porch and main hall under the desert night sky,
- *   creating a welcoming beacon visible from 200m away across the moonlit dunes!
+ * Night Sanctuary — The Abandoned Desert Observatory House (SARAB v6.0 Stage 4)
+ * - ZERO non-colliding yellow sand-drift cones!
+ * - ZERO old jug/vase or jeep assets!
+ * - 3 rich interactive story clues: Porch Sign/Marker -> Salem's Study Ledger -> Final Rescue Beacon Lantern!
+ * - Exposes 3D lantern positions for spatial fire-crackle audio + solid wall meshes for sun occlusion.
  */
 export class AbandonedHouse {
   constructor(parentGroup, textureManager, modelManager, physics, getHeightFn, centerX = 0, centerZ = -68, baseY = 0) {
@@ -32,8 +30,9 @@ export class AbandonedHouse {
     this.windTurbine = null;
     this.windVane = null;
     this.lanternLights = [];
+    this.lanternWorldPositions = [];
     this.beaconSprite = null;
-    this.sanctuaryInteractable = null;
+    this.interactables = [];
 
     this._createMaterials();
     this._buildMainEstate();
@@ -64,7 +63,7 @@ export class AbandonedHouse {
           vertexColors: true,
           color: 0xe6d6bc,
         });
-    this.adobeMat.name = 'adobe_wall_v5';
+    this.adobeMat.name = 'adobe_wall_v6';
 
     this.adobeMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
@@ -81,10 +80,10 @@ export class AbandonedHouse {
            float _al = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
            diffuseColor.rgb = mix(vec3(_al), diffuseColor.rgb, 0.62) * 1.28 + vec3(0.025, 0.02, 0.015);
            float groundDust = smoothstep(0.95, 0.02, vAdobeWorldPos.y);
-           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.25, 0.17), groundDust * 0.36);`
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.25, 0.17), groundDust * 0.34);`
         );
     };
-    attachDesertGrading(this.adobeMat, { saturation: 0.88, contrast: 1.03 });
+    attachDesertGrading(this.adobeMat, { saturation: 0.88, contrast: 1.02 });
 
     this.ceilingMat = new THREE.MeshLambertMaterial({
       color: DESERT_PALETTE.ceilingPlaster,
@@ -130,7 +129,7 @@ export class AbandonedHouse {
           vertexColors: true,
           color: 0xc2b296,
         });
-    attachDesertGrading(this.floorMat, { saturation: 0.88, contrast: 1.03 });
+    attachDesertGrading(this.floorMat, { saturation: 0.88, contrast: 1.02 });
 
     const fabric = this.tex.loadPBRSet('tattered_fabric', 2.4, 2.0);
     this.fabricMat = new THREE.MeshLambertMaterial({
@@ -149,7 +148,6 @@ export class AbandonedHouse {
         );
     };
 
-    // Procedural traditional Bedouin Sadu woven rug
     this.rugMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     this.rugMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
@@ -186,18 +184,9 @@ export class AbandonedHouse {
     const rock = this.tex.loadPBRSet('sandstone_rock', 2.0, 2.0);
     this.stoneMat = new THREE.MeshLambertMaterial({ map: rock.map, color: 0xb6a084 });
 
-    const sandPbr = this.tex.loadPBRSet('sand', 2.0, 2.0);
-    this.sandDriftMat = new THREE.MeshLambertMaterial({ map: sandPbr.map, color: 0xdccaa8 });
-
-    this.darkMetalMat = new THREE.MeshStandardMaterial({
-      color: 0x3b3129,
-      roughness: 0.68,
-      metalness: 0.65,
-    });
-
-    this.lanternGlowMat = new THREE.MeshBasicMaterial({
-      color: 0xffc86e,
-    });
+    this.paperMat = new THREE.MeshLambertMaterial({ color: 0xe6d4ae, side: THREE.DoubleSide });
+    this.scarfMat = new THREE.MeshLambertMaterial({ color: 0x9e3226, side: THREE.DoubleSide });
+    this.lanternGlowMat = new THREE.MeshBasicMaterial({ color: 0xffc86e });
   }
 
   _addBox(x, y, z, w, h, d, addCollider = true, mat = this.adobeMat, castShadow = true, forceClimbable = null) {
@@ -231,7 +220,6 @@ export class AbandonedHouse {
     const H = 4.35;
     const t = 0.56;
 
-    // Subdivided interior stone floor slab with deep Baked Wall-Junction Contact AO!
     const floorGeo = new THREE.BoxGeometry(14.8, 0.24, 12.2, 8, 1, 8);
     const fp = floorGeo.attributes.position;
     const fc = new Float32Array(fp.count * 3);
@@ -239,7 +227,6 @@ export class AbandonedHouse {
       const px = fp.getX(i);
       const pz = fp.getZ(i);
       const outerEdge = Math.max(Math.abs(px) / 7.4, Math.abs(pz) / 6.1);
-      // Darken along outer walls AND along interior divider walls at x=-2.3 and x=+2.6!
       const div1 = Math.max(0, 1.0 - Math.abs(px + 2.3) / 1.35) * (pz < 1.2 || pz > 3.2 ? 0.24 : 0.06);
       const div2 = Math.max(0, 1.0 - Math.abs(px - 2.6) / 1.35) * (pz < 1.2 || pz > 3.2 ? 0.24 : 0.06);
       const wallSeam = Math.pow(Math.max(0, outerEdge - 0.62) / 0.38, 1.6) * 0.42;
@@ -276,7 +263,7 @@ export class AbandonedHouse {
     step.receiveShadow = true;
     this.group.add(step);
 
-    // Front wall (+Z = +6.1) with grand open doorway + 2 windows
+    // Front wall (+Z = +6.1)
     this._addBox(-6.5, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
     this._addBox(-2.3, H / 2, 6.1, 2.2, H, t, true, this.adobeMat, true, false);
     this._addBox(-4.4, 0.65, 6.1, 2.0, 1.3, t, true, this.adobeMat, true, false);
@@ -291,7 +278,6 @@ export class AbandonedHouse {
     this._addBox(4.4, 1.32, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
     this._addBox(4.4, 2.74, 6.1, 2.1, 0.11, 0.64, false, this.woodMat);
 
-    // Doorway lintel & half-open weathered wooden door
     this._addBox(0, 3.68, 6.1, 2.5, 1.35, t, false);
     this._addBox(0, 2.98, 6.1, 2.75, 0.18, 0.66, false, this.woodMat);
     this._addBox(-1.22, 1.48, 6.1, 0.14, 2.96, 0.6, false, this.woodMat);
@@ -307,13 +293,12 @@ export class AbandonedHouse {
     this._addBox(-7.45, H * 0.48, -6.15, 0.78, H * 0.96, 0.78, false);
     this._addBox(7.45, H * 0.48, -6.15, 0.78, H * 0.96, 0.78, false);
 
-    // Back wall (-Z = -6.1) with rear archway
+    // Back, West & East walls
     this._addBox(-4.35, H / 2, -6.1, 6.5, H, t, true, this.adobeMat, true, false);
     this._addBox(4.35, H / 2, -6.1, 6.5, H, t, true, this.adobeMat, true, false);
     this._addBox(0, 3.65, -6.1, 2.3, 1.4, t, false);
     this._addBox(0, 2.92, -6.1, 2.5, 0.16, 0.64, false, this.woodMat);
 
-    // West & East walls
     this._addBox(-7.35, H / 2, 3.85, t, H, 4.9, true, this.adobeMat, true, false);
     this._addBox(-7.35, H / 2, -3.85, t, H, 4.9, true, this.adobeMat, true, false);
     this._addBox(-7.35, 0.65, 0, t, 1.3, 2.8, true, this.adobeMat, true, false);
@@ -369,24 +354,10 @@ export class AbandonedHouse {
       this.group.add(beam);
     }
 
-    // Second-tier rooftop watchroom silhouette
     this._addBox(-2.4, 5.9, -2.0, 5.6, 2.6, 4.8, false);
     this._addBox(-2.4, 7.35, -4.25, 5.6, 0.36, 0.32, false);
 
-    // Windblown sand drifts in interior corners
-    [
-      { x: -0.2, y: 0.1, z: 5.1, sx: 2.0, sy: 0.28, sz: 2.3 },
-      { x: -6.4, y: 0.12, z: -5.1, sx: 1.7, sy: 0.34, sz: 1.7 },
-      { x: 6.3, y: 0.12, z: 5.0, sx: 1.5, sy: 0.30, sz: 1.6 },
-    ].forEach((d) => {
-      const dGeo = new THREE.ConeGeometry(1.0, 1.0, 8);
-      dGeo.scale(d.sx, d.sy, d.sz);
-      const dm = new THREE.Mesh(dGeo, this.sandDriftMat);
-      dm.position.set(d.x, d.y, d.z);
-      this.group.add(dm);
-    });
-
-    // Baked soft ground Contact AO perimeter shadow decal under the estate
+    // Baked soft ground Contact AO perimeter shadow decal under the estate (NO yellow sand cones!)
     const shGeo = new THREE.PlaneGeometry(21.0, 18.0);
     shGeo.rotateX(-Math.PI / 2);
     const houseShadow = new THREE.Mesh(
@@ -395,7 +366,7 @@ export class AbandonedHouse {
         map: this.tex.createContactShadowTexture(),
         transparent: true,
         depthWrite: false,
-        opacity: 0.56,
+        opacity: 0.54,
         polygonOffset: true,
         polygonOffsetFactor: -2,
       })
@@ -499,7 +470,6 @@ export class AbandonedHouse {
     const mesh = this.models?.createMesh('lantern', 0.16);
     if (mesh) g.add(mesh);
 
-    // Glowing flame core inside glass
     const core = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), this.lanternGlowMat);
     core.position.y = 0.24;
     g.add(core);
@@ -508,20 +478,24 @@ export class AbandonedHouse {
     light.position.set(0, 0.34, 0);
     g.add(light);
     this.lanternLights.push({ light, baseIntensity: intensity, phase: Math.random() * 6.28 });
+    this.lanternWorldPositions.push({
+      type: 'lantern',
+      x: this.centerX + x,
+      y: this.baseY + y,
+      z: this.centerZ + z,
+    });
 
     this.group.add(g);
     return g;
   }
 
   _buildInteriorSanctuary() {
-    // Main Hall Bedouin Sadu Rug
     const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.6), this.rugMat);
     rug.rotation.x = -Math.PI / 2;
     rug.position.set(0.1, 0.175, 1.4);
     rug.receiveShadow = true;
     this.group.add(rug);
 
-    // Instanced weathered crates (NO Jug/Vase!)
     const crateGeo = this.models?.getGeometry('crate');
     const crateMat = this.models?.getMaterial('crate');
     if (crateGeo && crateMat) {
@@ -551,37 +525,22 @@ export class AbandonedHouse {
       true
     );
 
-    // Low wooden sanctuary table in center-north of Main Hall holding the Guiding Night Lantern!
-    const centerTable = this.models?.createMesh('table', 1.85);
-    if (centerTable) {
-      centerTable.position.set(0.1, 0.16, -2.0);
-      this.group.add(centerTable);
-    } else {
-      this._addBox(0.1, 0.56, -2.0, 1.6, 0.8, 0.9, false, this.woodMat);
-    }
-    this.physics.addBoxCollider(
-      this.centerX - 0.85,
-      this.centerX + 1.05,
-      this.centerZ - 2.5,
-      this.centerZ - 1.5,
-      this.baseY + 0.16,
-      this.baseY + 0.96,
-      true
-    );
+    // Clue 4.1: Salem's Red Desert Scarf tied on the front porch doorway post under the glowing lantern!
+    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.52, 0.08), this.scarfMat);
+    scarf.position.set(1.35, 1.65, 6.45);
+    scarf.rotation.z = 0.18;
+    this.group.add(scarf);
 
-    // 1. Primary Sanctuary Lantern on central hall table (final interactive destination!)
-    this._createGlowingLantern(0.1, 0.90, -2.0, 8.5, 19.0);
-    this.sanctuaryInteractable = {
-      id: 'sanctuary_lantern',
-      label: 'تأمل المصباح المضيء',
-      worldPos: new THREE.Vector3(this.centerX + 0.1, this.baseY + 1.18, this.centerZ - 2.0),
-      radius: 4.0,
-    };
+    this.interactables.push({
+      id: 'courtyard_marker',
+      label: 'فحص شال سالم عند الباب',
+      worldPos: new THREE.Vector3(this.centerX + 1.35, this.baseY + 1.75, this.centerZ + 6.45),
+      radius: 4.2,
+    });
 
-    // 2. Warm welcoming Front Porch Lantern right beside the doorway — guides player across 200m of night dunes!
-    this._createGlowingLantern(1.75, 2.38, 6.55, 10.5, 24.0);
+    // Front Porch Lantern
+    this._createGlowingLantern(1.75, 2.38, 6.55, 11.5, 26.0);
 
-    // Distant warm glow halo sprite above the porch lantern so the house glimmers like a star across the night dunes!
     const glowTex = this._createGlowSpriteTexture();
     const spriteMat = new THREE.SpriteMaterial({
       map: glowTex,
@@ -597,7 +556,7 @@ export class AbandonedHouse {
     this.beaconSprite.scale.set(2.8, 2.8, 1);
     this.group.add(this.beaconSprite);
 
-    // West Room: weathered desert table & chair + subtle warm lantern
+    // Clue 4.2: West Study Room Desk with Salem's Complete Journey Ledger!
     const deskMesh = this.models?.createMesh('table', 2.2);
     if (deskMesh) {
       deskMesh.position.set(-5.35, 0.16, -0.4);
@@ -618,9 +577,45 @@ export class AbandonedHouse {
       chairMesh.rotation.y = -2.4;
       this.group.add(chairMesh);
     }
-    this._createGlowingLantern(-5.65, 1.04, -0.45, 4.2, 12.0);
+    const ledger = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.52), this.paperMat);
+    ledger.position.set(-5.15, 1.06, -0.35);
+    ledger.rotation.y = 0.22;
+    this.group.add(ledger);
 
-    // East Room: weathered wooden bench & shelves
+    this._createGlowingLantern(-5.78, 1.04, -0.52, 4.6, 13.0);
+    this.interactables.push({
+      id: 'salem_ledger',
+      label: 'قراءة دفتر رحلة سالم',
+      worldPos: new THREE.Vector3(this.centerX - 5.15, this.baseY + 1.12, this.centerZ - 0.35),
+      radius: 4.0,
+    });
+
+    // Clue 4.3: Main Hall Sanctuary Rescue Beacon Lantern on Central Table!
+    const centerTable = this.models?.createMesh('table', 1.85);
+    if (centerTable) {
+      centerTable.position.set(0.1, 0.16, -2.0);
+      this.group.add(centerTable);
+    } else {
+      this._addBox(0.1, 0.56, -2.0, 1.6, 0.8, 0.9, false, this.woodMat);
+    }
+    this.physics.addBoxCollider(
+      this.centerX - 0.85,
+      this.centerX + 1.05,
+      this.centerZ - 2.5,
+      this.centerZ - 1.5,
+      this.baseY + 0.16,
+      this.baseY + 0.96,
+      true
+    );
+    this._createGlowingLantern(0.1, 0.90, -2.0, 9.0, 20.0);
+    this.interactables.push({
+      id: 'sanctuary_lantern',
+      label: 'إشعال مصباح الإشارة للإنقاذ',
+      worldPos: new THREE.Vector3(this.centerX + 0.1, this.baseY + 1.18, this.centerZ - 2.0),
+      radius: 4.0,
+    });
+
+    // East Room shelves
     this._addBox(5.2, 0.6, -4.4, 2.4, 0.92, 1.05, true, this.woodMat, false, true);
     this._addBox(6.4, 1.3, 1.8, 0.85, 2.25, 1.9, true, this.metalMat, false, false);
   }
@@ -650,7 +645,6 @@ export class AbandonedHouse {
       this.group.add(bInst);
     }
 
-    // Old desert stone well in back courtyard
     const wellX = -6.8;
     const wellZ = -10.4;
     const wellY = this.getHeight(this.centerX + wellX, this.centerZ + wellZ) - this.baseY;
@@ -693,7 +687,7 @@ export class AbandonedHouse {
   }
 
   _optimizeStaticBatches() {
-    const batchableMats = new Set([this.adobeMat, this.woodMat, this.metalMat, this.stoneMat, this.sandDriftMat]);
+    const batchableMats = new Set([this.adobeMat, this.woodMat, this.metalMat, this.stoneMat]);
     const dynamicSet = new Set([this.awningCloth, this.windVane, this.windTurbine]);
     const isDynamic = (obj) => {
       let cur = obj;
@@ -757,8 +751,8 @@ export class AbandonedHouse {
     }
   }
 
-  getSanctuaryInteractable() {
-    return this.sanctuaryInteractable;
+  getInteractables() {
+    return this.interactables;
   }
 
   update(dt, elapsed, playerPos) {
@@ -770,14 +764,12 @@ export class AbandonedHouse {
       this.windVane.rotation.y = 0.35 + Math.sin(elapsed * 0.32) * 0.18;
     }
 
-    // Gentle organic oil-lantern flicker
     for (let i = 0; i < this.lanternLights.length; i++) {
       const l = this.lanternLights[i];
       const flick = 0.90 + 0.08 * Math.sin(elapsed * 6.8 + l.phase) + 0.04 * Math.sin(elapsed * 15.2 + l.phase * 2.1);
       l.light.intensity = l.baseIntensity * flick;
     }
 
-    // Scale beacon halo gently with distance so it glimmers clearly from 200m away yet shrinks naturally up close
     if (this.beaconSprite && playerPos) {
       const dist = Math.hypot(playerPos.x - (this.centerX + 1.75), playerPos.z - (this.centerZ + 6.65));
       const scale = THREE.MathUtils.clamp(0.9 + dist * 0.042, 0.9, 8.5);
@@ -793,5 +785,7 @@ export class AbandonedHouse {
     disposeHierarchy(this.group, sharedGeos, sharedMats);
     this.parentGroup.remove(this.group);
     this.lanternLights.length = 0;
+    this.lanternWorldPositions.length = 0;
+    this.interactables.length = 0;
   }
 }

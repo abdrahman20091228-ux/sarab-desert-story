@@ -17,6 +17,7 @@ import {
   getCanyonHalfWidth,
   getRidgeCenterX,
   getRidgeHalfWidth,
+  getStage3DuneSeaHeight,
   getStage1SabkhaMask,
   getStage2RockMask,
   getStage3RockMask,
@@ -32,62 +33,143 @@ import { IS_MOBILE } from '../engine/Settings.js';
 export const STAGE_METADATA = {
   1: {
     id: 1,
-    title: 'سهول السراب المفتوحة',
-    subtitle: 'الظهر • رُجُم حجرية وسبخة متشققة',
+    chapterTag: 'الفصل الأول • الظهر',
+    title: 'سهول السراب — القافلة التائهة',
+    subtitle: 'ابحث عن أثر أخيك «سالم» عبر المعسكر المهجور والسبخة المتشققة',
     timeLabel: '١٢:٣٠ ظهراً',
-    objective: 'اتبع الرُّجُم الحجرية عبر السبخة نحو مدخل الوادي',
-    startPos: { x: 0, z: 114, yaw: 0.0, pitch: -0.02 },
-    goalPos: { x: 6, z: -116 },
-    goalRadius: 9.5,
-    whispers: [
-      { distZ: 108, text: 'شمس الظهيرة تصهر الأفق... سأتبع هذه الرُّجُم الحجرية شمالاً.' },
-      { distZ: 28, text: 'أرض سبخة متشققة تحت قدميّ... كأن بحيرة قديمة جفّت هنا منذ قرون.' },
-      { distZ: -64, text: 'البوابة الصخرية تلوح في الأفق... هناك وادٍ ضيق خلف هذه الكثبان.' },
+    startPos: { x: 0, z: 112, yaw: 0.14, pitch: -0.02 },
+    goalPos: { x: 4, z: -112 },
+    goalRadius: 9.0,
+    steps: [
+      {
+        id: 'camp_clue',
+        objective: 'تفحّص معسكر القافلة المهجور غرب الكثبان',
+        tag: 'دليل ١ من ٢ — سهول السراب',
+        title: 'معسكر القافلة ورسالة سالم الممزقة',
+        sfx: 'paper',
+        body: 'رماد النار ما زال دافئاً منذ الفجر... تحت صندوق المؤن وجدتَ قصاصة بخط أخيك «سالم»:\n\n«تفرّقت القافلة حين هبّت الرياح فجراً. سأترك علامتي عند الشاهد الحجري القديم وسط السبخة المتشققة قبل أن أدخل وادي الصخور.»',
+        whisper: 'سالم مرّ من هنا هذا الصباح! عليّ التوجه إلى الشاهد الحجري وسط السبخة المتشققة.',
+      },
+      {
+        id: 'sabkha_stele',
+        objective: 'اتجه إلى الشاهد الحجري المنقوش وسط السبخة المتشققة',
+        tag: 'دليل ٢ من ٢ — السبخة المتشققة',
+        title: 'شاهد السبخة وساعة الجيب النحاسية',
+        sfx: 'metal',
+        body: 'على قاعدة الشاهد الحجري العتيق ترك سالم ساعته النحاسية مشيرة نحو البوابة الصخرية شمالاً، وحفر سهماً على الحجر مع عبارة:\n\n«الماء نفد... سأحتمي بواحة النخيل داخل وادي الصخور. الحق بي قبل العصر!»',
+        whisper: 'ترك ساعته هنا ليدلّني على طريقه... مدخل وادي الصخور أمامي شمالاً، سأعبر إليه الآن.',
+      },
+      {
+        id: 'exit_stage1',
+        isExit: true,
+        objective: 'اعبر البوابة الصخرية شمالاً إلى وادي الصخور',
+      },
     ],
   },
   2: {
     id: 2,
-    title: 'وادي الصخور والتضاريس',
-    subtitle: 'العصر • جروف طبقية ونخيل وأطلال وهبّة غبار',
-    timeLabel: '٣:٥٠ عصراً',
-    objective: 'اعبر وادي الصخور والأطلال نحو ممر الصعود للجبل',
-    startPos: { x: getCanyonCenterX(118), z: 118, yaw: 0.0, pitch: -0.02 },
-    goalPos: { x: getCanyonCenterX(-122), z: -122 },
-    goalRadius: 9.5,
-    whispers: [
-      { distZ: 112, text: 'ظلال العصر تطول بين هذه الجروف الطبقية... والغبار يهبّ بهدوء.' },
-      { distZ: 46, text: 'أطلال قديمة نصف مدفونة في الرمل... من سكن هذا الوادي يوماً؟' },
-      { distZ: -8, text: 'نخيل يصمد وسط العطش... الطريق يضيق ويرتفع نحو الجبل.' },
+    chapterTag: 'الفصل الثاني • العصر',
+    title: 'وادي الصخور والواحة — ظلال الأطلال',
+    subtitle: 'استكشف أطلال الخان القديم وواحة النخيل للعثور على مسار الجبل',
+    timeLabel: '٣:٥٥ عصراً',
+    startPos: { x: getCanyonCenterX(116), z: 116, yaw: 0.0, pitch: -0.02 },
+    goalPos: { x: getCanyonCenterX(-118), z: -118 },
+    goalRadius: 9.0,
+    steps: [
+      {
+        id: 'ruin_note',
+        objective: 'استكشف أطلال الخان القديم وابحث عن أثر سالم',
+        tag: 'دليل ١ من ٢ — أطلال الخان القديم',
+        title: 'مذكرة القافلة داخل الخان',
+        sfx: 'paper',
+        body: 'بين جدران الخان المهدّمة علّق سالم ورقة مشدودة بحجر:\n\n«سمعتُ همساً غريباً يتردد من جهة الجبل المرتفع... لا بد أن هناك محطة رصد قديمة خلف الكثبان. ارتويتُ عند بئر واحة النخيل وتابعتُ طريقي شمالاً.»',
+        whisper: 'همس يتردد من الجبل؟ سأتفقد بئر واحة النخيل القريبة أولاً.',
+      },
+      {
+        id: 'oasis_well',
+        objective: 'تفقّد بئر واحة النخيل وسط الوادي',
+        tag: 'دليل ٢ من ٢ — واحة النخيل',
+        title: 'فانوس القافلة المطفي عند البئر',
+        sfx: 'metal',
+        body: 'بجوار البئر الحجرية المظللة بسعف النخيل، وجدتَ فانوساً نحاسياً منطفئاً وإبريق ماء فارغاً. آثار خطوات واضحة تصعد الآن نحو الممر الحجري المؤدي إلى قمة الجبل.',
+        whisper: 'الوقت يميل نحو الغروب... سأعبر ممر الصعود في نهاية الوادي لألحق به على الجبل.',
+      },
+      {
+        id: 'exit_stage2',
+        isExit: true,
+        objective: 'تابع نحو ممر الصعود إلى قمة الجبل في نهاية الوادي',
+      },
     ],
   },
   3: {
     id: 3,
-    title: 'قمة جبل السراب',
-    subtitle: 'الغروب والشفق • إطلالة على بحر الكثبان وبصيص نور بعيد',
-    timeLabel: '٦:١٢ مغرباً',
-    objective: 'اصعد إلى قمة الجبل وتأمل بحر الكثبان والضوء البعيد',
-    startPos: { x: getRidgeCenterX(106), z: 106, yaw: 0.0, pitch: 0.04 },
-    goalPos: { x: getRidgeCenterX(-102), z: -102 },
-    goalRadius: 4.5,
-    whispers: [
-      { distZ: 98, text: 'الريح تشتد كلما ارتفعت... والشمس تغوص في الشفق.' },
-      { distZ: 12, text: 'بحر لا ينتهي من الكثبان يتمدد أسفل الجبل... المنظر يخطف الأنفاس.' },
-      { distZ: -62, text: 'أرى بصيص نور دافئ يلمع بعيداً وسط الكثبان في الأسفل... هناك بيت مهجور!' },
+    chapterTag: 'الفصل الثالث • الغروب والشفق',
+    title: 'قمة جبل السراب — بصيص النور',
+    subtitle: 'اصعد نحو مأوى الراصد ومرصد القمة لتكتشف مصدر الضوء البعيد',
+    timeLabel: '٦:٠٨ مغرباً',
+    startPos: { x: getRidgeCenterX(104), z: 104, yaw: 0.0, pitch: 0.03 },
+    goalPos: { x: getRidgeCenterX(-96), z: -96 },
+    goalRadius: 6.5,
+    steps: [
+      {
+        id: 'ridge_shelter',
+        objective: 'تفقّد مأوى الراصد الحجري في منتصف صعود الجبل',
+        tag: 'دليل ١ من ٢ — مأوى الراصد',
+        title: 'خريطة النجوم وحقيبة سالم',
+        sfx: 'paper',
+        body: 'داخل هذا المأوى الصخري وجدتَ خريطة نجوم مرسومة بالحبر تحدد موقع بيتٍ صحراوي مهجور في قلب بحر الكثبان أسفل الجبل:\n\n«إلى من يبحث عني... انظر من المنظار النحاسي عند قمة الجبل؛ سأشعل مصباح البيت الليلة ليكون دليلك في العتمة.»',
+        whisper: 'سالم ينتظرني في البيت المهجور أسفل الكثبان! سأصعد إلى مرصد القمة لأرى مكانه.',
+      },
+      {
+        id: 'summit_spyglass',
+        objective: 'اصعد إلى قمة الجبل واستخدم المنظار النحاسي نحو بحر الكثبان',
+        tag: 'دليل ٢ من ٢ — قمة جبل السراب (٩٢م)',
+        title: 'بصيص النور في بحر الكثبان',
+        sfx: 'metal',
+        body: 'من ارتفاع ٩٢ متراً فوق بحر لا متناهٍ من الكثبان الغارقة في الشفق، يلمع بصيص نورٍ ذهبي دافئ من بيتٍ مهجور وحيد في الأسفل...\n\nلقد أوفى سالم بوعده وأشعل المصباح. الليل يوشك أن يحل؛ حان وقت النزول إليه.',
+        whisper: 'ها هو نور البيت يلمع أسفل بحر الكثبان... سأنزل إليه الآن تحت سماء الليل.',
+        triggersNextStage: true,
+      },
     ],
   },
   4: {
     id: 4,
-    title: 'البيت المهجور تحت النجوم',
-    subtitle: 'الليل • سماء النجوم والمجرة والهلال — اضغط F أو زر الكشاف',
+    chapterTag: 'الفصل الرابع • الليل',
+    title: 'البيت المهجور تحت النجوم — المصباح الأخير',
+    subtitle: 'اقترب تحت ضوء القمر والمجرة واستخدم الكشاف (F) لاكتشاف الحقيقة',
     timeLabel: '١٠:٤٠ ليلاً',
-    objective: 'اقترب من البيت المهجور تحت النجوم واستكشفه بالكشاف',
-    startPos: { x: -4, z: 122, yaw: 0.02, pitch: -0.02 },
+    startPos: { x: -4, z: 108, yaw: 0.02, pitch: -0.01 },
     goalPos: { x: STAGE4_HOUSE_X + 0.1, z: STAGE4_HOUSE_Z - 2.0 },
     goalRadius: 4.0,
-    whispers: [
-      { distZ: 116, text: 'حلّ الليل وتلألأت المجرة والهلال... سأشعل الكشاف وأسير نحو ذلك الضوء.' },
-      { distZ: 34, text: 'أصوات صراصير الليل والنسيم البارد... نور البيت يقترب.' },
-      { distZ: -44, text: 'وصلت أخيراً إلى البيت المهجور... مصباح مشتعل ينتظرني في الداخل.' },
+    steps: [
+      {
+        id: 'courtyard_marker',
+        objective: 'اقترب من البيت المهجور وتفحّص الشال الأحمر عند المدخل',
+        tag: 'دليل ١ من ٣ — فناء البيت المهجور',
+        title: 'شال سالم المعلّق تحت الفانوس',
+        sfx: 'paper',
+        body: 'شال سالم الأحمر مربوط بعناية على عمود الباب الخشبي وتحته ورقة قصيرة:\n\n«أهلاً بوصولك سالماً... تركتُ دفتر الرحلة الكامل على مكتب الغرفة اليسرى، وأبقيتُ مصباح الإنقاذ جاهزاً في الردهة.»',
+        whisper: 'كان هنا قبل قليل... سأدخل الغرفة اليسرى وأقرأ دفتر رحلته.',
+      },
+      {
+        id: 'salem_ledger',
+        objective: 'ادخل غرفة المكتب (الجهة اليسرى) واقرأ دفتر رحلة سالم',
+        tag: 'دليل ٢ من ٣ — غرفة المكتب',
+        title: 'دفتر رحلة سالم — سر الرمال المغنية',
+        sfx: 'paper',
+        body: '«لم نكن تائهين عبثاً... هذه المحطة كانت مرصداً قديماً لظاهرة الرمال المغنية في صحرائنا. حين أصلحتُ الهوائي فجراً استجاب فريق الإنقاذ وسيعبرون الوادي مع الفجر.\n\nخرجتُ لأستقبل القافلة عند التل الشرقي، أشعل المصباح الكبير في الردهة ليروا موقع البيت من بعيد!»',
+        whisper: 'سالم بخير وفريق الإنقاذ في طريقه! سأشعل مصباح الإشارة في الردهة الآن.',
+      },
+      {
+        id: 'sanctuary_lantern',
+        objective: 'عد إلى الردهة الرئيسية وأشعل مصباح الإشارة للإنقاذ',
+        tag: 'ختام الرحلة — تحت سماء النجوم',
+        title: 'نور في قلب الصحراء',
+        sfx: 'flame',
+        body: 'ارتفع وهج المصباح الذهبي ليغمر الردهة وينساب عبر النوافذ نحو الكثبان المضاءة بنور الهلال...\n\nمن لهيب الظهيرة والسبخة، إلى ظلال الوادي وقمة الشفق، انتهت رحلة التيه بسلام تحت سماء النجوم والمجرة.',
+        whisper: 'ارتفع نور المصباح عالياً في سماء الليل... اكتملت رحلة السراب.',
+        completesJourney: true,
+      },
     ],
   },
 };
@@ -107,6 +189,10 @@ export class StageManager {
     this.getNormal = createStageNormalSampler(this.getHeight);
 
     this.abandonedHouse = null;
+    this.stageInteractables = [];
+    this.spatialAudioSpots = [];
+    this.sunOccluders = [];
+
     this.palmTimeUniform = { value: 0 };
     this.palmStormUniform = { value: 0 };
     this.dustUniforms = null;
@@ -114,22 +200,19 @@ export class StageManager {
     this.hawks = [];
     this.hawkInst = null;
     this.beaconSprite = null;
-    this.goalRingMesh = null;
+    this.waypointMarker = null;
     this.stormIntensity = 0;
 
     this._dummy = new THREE.Object3D();
     this._faunaAccum = 0;
     this._baseDustCount = 200;
-    this._dustMaxCount = 300;
+    this._dustMaxCount = 260;
   }
 
   getStageMeta(stageId = this.currentStageId) {
     return STAGE_METADATA[stageId] || STAGE_METADATA[1];
   }
 
-  /**
-   * Completely unloads and disposes the previous stage's geometries, materials, lights, and colliders!
-   */
   disposeCurrentStage() {
     const { geometries: sharedGeos, materials: sharedMats } = this.models.getSharedSets();
 
@@ -142,11 +225,14 @@ export class StageManager {
       this.beaconSprite.material.map.dispose();
     }
     this.beaconSprite = null;
-    this.goalRingMesh = null;
+    this.waypointMarker = null;
     this.dustPoints = null;
     this.dustUniforms = null;
     this.hawkInst = null;
     this.hawks.length = 0;
+    this.stageInteractables.length = 0;
+    this.spatialAudioSpots.length = 0;
+    this.sunOccluders.length = 0;
 
     if (this.stageGroup) {
       disposeHierarchy(this.stageGroup, sharedGeos, sharedMats);
@@ -166,11 +252,9 @@ export class StageManager {
     this.stageGroup.name = `stage_${id}`;
     this.scene.add(this.stageGroup);
 
-    // 1. Apply stage sky, sun/moon direction, fog, and lighting palette FIRST so baking uses exact sunDir!
     this.sky.applyStage(id, true);
     this.stormIntensity = STAGE_ATMOSPHERES[id].stormBase || 0;
 
-    // 2. Configure exact visual-physics terrain & surface samplers
     this.getHeight = createStageHeightSampler(id);
     this.getNormal = createStageNormalSampler(this.getHeight);
     const surfaceSampler = createStageSurfaceSampler(id, this.getHeight);
@@ -180,23 +264,23 @@ export class StageManager {
     if (id === 2) {
       bounds = {
         type: 'corridor',
-        minZ: -132,
-        maxZ: 132,
+        minZ: -128,
+        maxZ: 128,
         centerXFn: getCanyonCenterX,
-        halfWidthFn: (z) => getCanyonHalfWidth(z) + 2.5,
+        halfWidthFn: (z) => getCanyonHalfWidth(z) + 1.5,
       };
       maxSlope = 0.88;
     } else if (id === 3) {
       bounds = {
         type: 'corridor',
-        minZ: -112,
-        maxZ: 118,
+        minZ: -102,
+        maxZ: 114,
         centerXFn: getRidgeCenterX,
         halfWidthFn: (z) => getRidgeHalfWidth(z) - 0.5,
       };
       maxSlope = 0.85;
     } else if (id === 4) {
-      bounds = { type: 'box', minX: -115, maxX: 115, minZ: -115, maxZ: 142 };
+      bounds = { type: 'box', minX: -110, maxX: 110, minZ: -110, maxZ: 132 };
     }
 
     this.physics.configureStage({
@@ -206,7 +290,6 @@ export class StageManager {
       maxSlope,
     });
 
-    // 3. Collect contact-AO occluders while building landmarks, THEN bake terrain lighting & Contact AO!
     const contactOccluders = [];
     const decalPlacements = [];
 
@@ -220,29 +303,41 @@ export class StageManager {
       this._buildStage4Night(contactOccluders, decalPlacements);
     }
 
-    // 4. Build Terrain with Baked Lighting + Object Contact AO + Dual PBR NormalMap Blending!
     this._buildStageTerrain(id, contactOccluders);
     this._buildHorizonSkirt(id);
 
-    // 5. Instanced Ground Contact AO decals (1 draw call for entire stage!)
     if (decalPlacements.length > 0) {
-      const decalOpacity = id === 4 ? 0.52 : 0.44;
+      const decalOpacity = id === 4 ? 0.42 : 0.44;
       const decalInst = createContactAODecalInstanced(this.tex, decalPlacements, this.getHeight, this.getNormal, decalOpacity);
       if (decalInst) this.stageGroup.add(decalInst);
     }
 
-    // 6. Stage-calibrated GPU ambient dust motes
     this._createGPUDustParticles(id);
+    this._createSubtleWaypointMarker();
 
-    // 7. Subtle landmark ring at stage exit pass (Stages 1-3)
-    if (id < 4) {
-      const meta = STAGE_METADATA[id];
-      const gy = this.getHeight(meta.goalPos.x, meta.goalPos.z);
-      this._createGoalBeaconMarker(meta.goalPos.x, gy + 2.4, meta.goalPos.z, id);
-    }
+    // Register solid world occluders with SkyLighting so the sun NEVER shines through mountains/cliffs/buildings!
+    this.sky.setSunOcclusionContext(this.sunOccluders, this.getHeight, this.physics);
 
     this.applySettings(this.settings.getPreset());
     return STAGE_METADATA[id];
+  }
+
+  _createSubtleWaypointMarker() {
+    // Clean delicate diamond beacon floating softly above the active objective (fades out within 7m!)
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.30, 4),
+      new THREE.MeshBasicMaterial({
+        color: 0xffdf92,
+        transparent: true,
+        opacity: 0.78,
+        side: THREE.DoubleSide,
+        depthTest: false,
+      })
+    );
+    ring.renderOrder = 10;
+    ring.visible = false;
+    this.waypointMarker = ring;
+    this.stageGroup.add(ring);
   }
 
   _buildStageTerrain(stageId, contactOccluders) {
@@ -273,15 +368,14 @@ export class StageManager {
     geo.setAttribute('aBlend', new THREE.BufferAttribute(blendArr, 1));
     geo.computeVertexNormals();
 
-    // Bake directional sky/sun lighting + crevice concavity AO + exact Object-to-Ground Contact AO!
     const isNight = stageId === 4;
     const isSunset = stageId === 3;
     bakeTerrainLightingAndContactAO(geo, this.getHeight, this.sky.sunDirection, {
       occluders: contactOccluders,
-      sunStrength: isNight ? 0.14 : isSunset ? 0.24 : 0.18,
-      cavityStrength: stageId === 2 ? 0.30 : 0.22,
-      warmBounce: isNight ? [0.95, 0.98, 1.05] : isSunset ? [1.05, 0.94, 0.88] : [1.02, 0.99, 0.95],
-      shadowTint: isNight ? [0.68, 0.74, 0.88] : isSunset ? [0.66, 0.56, 0.72] : [0.80, 0.74, 0.68],
+      sunStrength: isNight ? 0.16 : isSunset ? 0.20 : 0.17,
+      cavityStrength: stageId === 2 ? 0.28 : 0.20,
+      warmBounce: isNight ? [0.96, 1.0, 1.06] : isSunset ? [1.03, 0.96, 0.91] : [1.02, 0.99, 0.95],
+      shadowTint: isNight ? [0.76, 0.82, 0.94] : isSunset ? [0.72, 0.64, 0.74] : [0.80, 0.74, 0.68],
     });
 
     const mat = this._createStageTerrainMaterial(stageId);
@@ -308,19 +402,19 @@ export class StageManager {
       secondRepeat = 62;
     }
 
-    const useLambert = IS_MOBILE;
+    const useLambert = IS_MOBILE && this.settings.data.quality === 'low';
     const mat = useLambert
       ? new THREE.MeshLambertMaterial({
           map: sandPbr.map,
           normalMap: sandPbr.normalMap,
-          normalScale: new THREE.Vector2(1.05, 1.05),
+          normalScale: new THREE.Vector2(1.02, 1.02),
           vertexColors: true,
           color: atmos.sandTint,
         })
       : new THREE.MeshStandardMaterial({
           map: sandPbr.map,
           normalMap: sandPbr.normalMap,
-          normalScale: new THREE.Vector2(1.08, 1.08),
+          normalScale: new THREE.Vector2(1.05, 1.05),
           roughness: 0.92,
           metalness: 0.02,
           vertexColors: true,
@@ -367,12 +461,12 @@ export class StageManager {
         ? `
           vec2 _uv2 = vTerrainRawUv * uSecondRepeat;
           vec3 _secCol = texture2D(uSecondMap, _uv2).rgb;
-          // Stage 2 steep canyon walls get sedimentary horizontal strata bands!
           if (uStageId > 1.5 && uStageId < 2.5) {
-            float wallGrad = smoothstep(5.5, 18.0, vTerrainWorldPos.y);
-            float strata = sin(vTerrainWorldPos.y * 1.35 + sin(vTerrainWorldPos.x * 0.05 + vTerrainWorldPos.z * 0.05) * 1.4) * 0.5 + 0.5;
-            vec3 strataCol = mix(vec3(0.42, 0.30, 0.21), vec3(0.68, 0.54, 0.39), strata);
-            _secCol = mix(_secCol, strataCol, wallGrad * 0.72);
+            // Stratified desert sedimentary cliff walls in Stage 2!
+            float wallGrad = smoothstep(3.8, 13.0, vTerrainWorldPos.y);
+            float strata = sin(vTerrainWorldPos.y * 1.45 + sin(vTerrainWorldPos.x * 0.045 + vTerrainWorldPos.z * 0.045) * 1.2) * 0.5 + 0.5;
+            vec3 strataCol = mix(vec3(0.46, 0.34, 0.24), vec3(0.72, 0.58, 0.43), strata);
+            _secCol = mix(_secCol, strataCol, wallGrad * 0.78);
           }
           diffuseColor.rgb = mix(diffuseColor.rgb, _secCol, clamp(vBlend, 0.0, 1.0));
         `
@@ -393,7 +487,7 @@ export class StageManager {
           `#include <map_fragment>
            ${blendColorCode}
            float _macro = sin(vTerrainWorldPos.x * 0.042 + vTerrainWorldPos.z * 0.036) * 0.5 + 0.5;
-           diffuseColor.rgb *= mix(vec3(0.95, 0.91, 0.85), vec3(1.04, 1.0, 0.94), _macro);`
+           diffuseColor.rgb *= mix(vec3(0.95, 0.91, 0.86), vec3(1.04, 1.0, 0.95), _macro);`
         );
 
       if (secondPbr) {
@@ -411,11 +505,11 @@ export class StageManager {
     };
 
     attachDesertGrading(mat, {
-      saturation: stageId === 4 ? 0.86 : 0.93,
-      contrast: 1.03,
-      aerialStrength: stageId === 3 ? 0.38 : 0.0,
-      aerialStart: 95,
-      aerialEnd: 380,
+      saturation: stageId === 4 ? 0.88 : 0.92,
+      contrast: 1.02,
+      aerialStrength: stageId === 3 ? 0.44 : 0.0,
+      aerialStart: 120,
+      aerialEnd: 460,
     });
 
     return mat;
@@ -423,12 +517,12 @@ export class StageManager {
 
   _buildHorizonSkirt(stageId) {
     const atmos = STAGE_ATMOSPHERES[stageId];
-    const size = stageId === 3 ? 1850 : 1520;
-    const segments = stageId === 3 ? 48 : 32;
+    const size = stageId === 3 ? 1900 : 1520;
+    const segments = stageId === 3 ? 64 : 36;
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
     geo.rotateX(-Math.PI / 2);
 
-    const innerHalf = STAGE_TERRAIN_CONFIG[stageId].size * 0.48;
+    const innerHalf = STAGE_TERRAIN_CONFIG[stageId].size * 0.485;
     const pos = geo.attributes.position;
     const cols = new Float32Array(pos.count * 3);
 
@@ -439,46 +533,44 @@ export class StageManager {
       let y;
 
       if (stageId === 3) {
-        // Vast sculpted twilight Sea of Arabian Dunes stretching endlessly below the 92m mountain peak!
-        const d1 = Math.sin(x * 0.022 + z * 0.017 + Math.sin(z * 0.01) * 1.4);
-        const duneSea =
-          Math.pow(1.0 - Math.abs(d1), 1.15) * 9.5 +
-          Math.sin(x * 0.009 - z * 0.008) * 6.5 +
-          Math.cos(x * 0.014 + z * 0.012) * 4.5 +
-          5.0;
-        y = dist < innerHalf ? duneSea - 4.0 : duneSea;
+        // EXACT SAME continuous Dune Sea heightfield as StageTerrain -> ZERO seam or color jump!
+        const duneSea = getStage3DuneSeaHeight(x, z);
+        const insideDip = dist < innerHalf ? -8.0 * (1.0 - dist / innerHalf) : 0.0;
+        y = duneSea + insideDip;
       } else {
         y = getStageAnalyticHeight(stageId, x, z);
         if (dist < innerHalf) {
-          y -= 4.0;
+          y -= 16.0; // Strictly tucked far beneath playable terrain so it NEVER pokes through!
         } else {
           const farFactor = Math.min(1, (dist - innerHalf) / 260);
-          y += (Math.sin(x * 0.008 + z * 0.006) * 18 + Math.cos(x * 0.005 - z * 0.009) * 14) * farFactor;
+          y += (Math.sin(x * 0.008 + z * 0.006) * 16 + Math.cos(x * 0.005 - z * 0.009) * 12) * farFactor;
         }
       }
 
       pos.setY(i, y);
-      const shade = THREE.MathUtils.clamp(0.90 + y * 0.004, 0.78, 1.06);
+      const shade = THREE.MathUtils.clamp(0.92 + y * 0.004, 0.80, 1.05);
       cols[i * 3] = shade;
-      cols[i * 3 + 1] = shade * 0.96;
-      cols[i * 3 + 2] = shade * 0.92;
+      cols[i * 3 + 1] = shade * 0.97;
+      cols[i * 3 + 2] = shade * 0.94;
     }
 
     geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     geo.computeVertexNormals();
 
-    const sandPbr = this.tex.loadPBRSet('sand', 88, 88);
-    const mat = new THREE.MeshLambertMaterial({
+    const sandPbr = this.tex.loadPBRSet('sand', 92, 92);
+    const mat = new THREE.MeshStandardMaterial({
       map: sandPbr.map,
+      roughness: 0.93,
+      metalness: 0.01,
       vertexColors: true,
       color: atmos.sandTint,
     });
     attachDesertGrading(mat, {
-      saturation: 0.85,
-      contrast: 1.0,
-      aerialStrength: stageId === 3 ? 0.56 : 0.45,
-      aerialStart: 150,
-      aerialEnd: 620,
+      saturation: stageId === 4 ? 0.86 : 0.90,
+      contrast: 1.01,
+      aerialStrength: stageId === 3 ? 0.44 : 0.42,
+      aerialStart: stageId === 3 ? 120 : 160,
+      aerialEnd: stageId === 3 ? 460 : 620,
     });
 
     const mesh = new THREE.Mesh(geo, mat);
@@ -486,81 +578,100 @@ export class StageManager {
   }
 
   // ============================================================================
-  // SHARED REUSABLE BUILDERS (Stone Cairns, Stratified Mesas/Cliffs, Palms, Rocks)
+  // WATERTIGHT SOLID SCULPTED DESERT BOULDERS (Replaces broken open-shell rock_07/09!)
   // ============================================================================
+  _createWatertightBoulderGeo(variant = 0) {
+    // 100% closed-manifold, beveled stratified desert sandstone boulder with deep submerged base skirt!
+    const geo = new THREE.IcosahedronGeometry(1.0, 2);
+    const p = geo.attributes.position;
+    const phase = variant === 0 ? 0.0 : 2.15;
 
-  _createCairnGeometry() {
-    // Authentic stacked Arabian stone cairn (رُجم حجري) of 5 tapered weathered limestone stones with Baked Contact AO!
-    const stones = [];
-    const layers = [
-      { y: 0.24, rx: 0.72, ry: 0.26, rz: 0.64, ox: 0.0, oz: 0.0, rot: 0.1 },
-      { y: 0.64, rx: 0.56, ry: 0.22, rz: 0.52, ox: 0.05, oz: -0.04, rot: 0.8 },
-      { y: 0.98, rx: 0.42, ry: 0.19, rz: 0.39, ox: -0.04, oz: 0.03, rot: 1.6 },
-      { y: 1.28, rx: 0.30, ry: 0.16, rz: 0.27, ox: 0.02, oz: 0.02, rot: 2.3 },
-      { y: 1.54, rx: 0.19, ry: 0.14, rz: 0.18, ox: -0.01, oz: -0.01, rot: 0.5 },
-    ];
-    for (const l of layers) {
-      const g = new THREE.IcosahedronGeometry(1.0, 1);
-      const p = g.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        let vx = p.getX(i);
-        let vy = p.getY(i);
-        let vz = p.getZ(i);
-        const crag = 0.88 + 0.20 * Math.sin(vx * 5.2 + vz * 4.7) * Math.cos(vy * 3.8);
-        vx *= l.rx * crag;
-        vy *= l.ry * crag;
-        vz *= l.rz * crag;
-        p.setXYZ(i, vx, vy, vz);
+    for (let i = 0; i < p.count; i++) {
+      let x = p.getX(i);
+      let y = p.getY(i);
+      let z = p.getZ(i);
+
+      // Multi-frequency geological crag & sedimentary strata sculpting
+      const n1 = Math.sin(x * 3.1 + phase) * Math.cos(z * 2.8 - phase) * 0.16;
+      const n2 = Math.cos(y * 5.2 + x * 4.4 + phase) * 0.09;
+      const strata = Math.sin(y * 9.5 + z * 1.8) * 0.045;
+      const scale = 1.0 + n1 + n2 + strata;
+
+      x *= (variant === 0 ? 1.18 : 1.32) * scale;
+      z *= (variant === 0 ? 0.96 : 0.88) * scale;
+      // Flatten upper cap slightly like wind-eroded desert sandstone and extend base smoothly downward
+      if (y > 0) {
+        y = Math.pow(y, 0.82) * (variant === 0 ? 0.78 : 0.62) * scale;
+      } else {
+        y = y * 0.65; // Solid deeply-planted bottom half (NEVER open or hollow!)
       }
-      g.rotateY(l.rot);
-      g.translate(l.ox, l.y, l.oz);
-      g.computeVertexNormals();
-      // Bake stone-on-stone contact AO inside each stone layer!
-      bakeRockContactAO(g, { bottomAO: 0.54, topLift: 1.04, undersideAO: 0.28 });
-      stones.push(g);
+      p.setXYZ(i, x, y, z);
     }
-    const merged = mergeGeometries(stones, false);
-    stones.forEach((g) => g.dispose());
-    return merged;
+    geo.computeVertexNormals();
+    // Bake rich crevice & ground-contact AO into boulder vertices!
+    bakeRockContactAO(geo, { bottomAO: 0.56, topLift: 1.04, undersideAO: 0.22 });
+    return geo;
   }
 
-  _placeStoneCairns(sites, occluders, decals) {
-    if (!sites.length) return;
-    const cairnGeo = this._createCairnGeometry();
-    const rockPbr = this.tex.loadPBRSet('sandstone_rock', 2, 2);
-    const cairnMat = new THREE.MeshLambertMaterial({
-      map: rockPbr.map,
-      normalMap: IS_MOBILE ? null : rockPbr.normalMap,
-      normalScale: new THREE.Vector2(0.75, 0.75),
+  _placeSolidBoulders(placements, occluders, decals, stageId) {
+    if (!placements.length) return;
+    const atmos = STAGE_ATMOSPHERES[stageId];
+    const geo0 = this._createWatertightBoulderGeo(0);
+    const geo1 = this._createWatertightBoulderGeo(1);
+
+    const pbr = this.tex.loadPBRSet('sandstone_rock', 2, 2);
+    const rockMat = new THREE.MeshStandardMaterial({
+      map: pbr.map,
+      normalMap: pbr.normalMap,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.92,
+      metalness: 0.02,
       vertexColors: true,
-      color: 0xeae0cc,
+      color: atmos.rockTint,
     });
-    attachDesertGrading(cairnMat, { saturation: 0.68, contrast: 1.02 });
+    rockMat.name = `solid_boulder_s${stageId}`;
+    attachDesertGrading(rockMat, { saturation: 0.84, contrast: 1.03 });
 
-    const inst = new THREE.InstancedMesh(cairnGeo, cairnMat, sites.length);
-    inst.castShadow = !IS_MOBILE;
-    inst.receiveShadow = true;
-
+    const list0 = placements.filter((p) => (p.type || 0) === 0);
+    const list1 = placements.filter((p) => (p.type || 0) === 1);
     const dummy = this._dummy;
-    sites.forEach((s, idx) => {
-      const y = this.getHeight(s.x, s.z);
-      const sc = s.scale ?? 1.0;
-      dummy.position.set(s.x, y - 0.08 * sc, s.z);
-      dummy.rotation.set(0, s.ry ?? idx * 1.1, 0);
-      dummy.scale.setScalar(sc);
-      dummy.updateMatrix();
-      inst.setMatrixAt(idx, dummy.matrix);
 
-      this.physics.addCylinderCollider(s.x, s.z, 0.72 * sc, y + 1.65 * sc, false);
-      occluders.push({ type: 'circle', x: s.x, z: s.z, r: 0.85 * sc, pad: 1.6, strength: 0.34 });
-      decals.push({ x: s.x, z: s.z, sx: 2.3 * sc, sz: 2.3 * sc, ry: s.ry ?? 0 });
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    this.stageGroup.add(inst);
+    const buildInst = (list, geo) => {
+      if (!list.length) return;
+      const inst = new THREE.InstancedMesh(geo, rockMat, list.length);
+      inst.castShadow = !IS_MOBILE;
+      inst.receiveShadow = true;
+      list.forEach((p, i) => {
+        const y = this.getHeight(p.x, p.z);
+        // Sink boulder 28% into the sand/rock so base is 100% locked into sloped terrain with ZERO gaps!
+        const sink = p.sy * 0.24;
+        dummy.position.set(p.x, y - sink + p.sy * 0.35, p.z);
+        dummy.rotation.set(0, p.ry || 0, 0);
+        dummy.scale.set(p.sx, p.sy, p.sz);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+
+        const rx = p.sx * 1.08;
+        const rz = p.sz * 0.92;
+        const topY = y - sink + p.sy * 0.95;
+        this.physics.addEllipseCollider(p.x, p.z, rx, rz, p.ry || 0, topY, p.climbable !== false);
+        occluders.push({ type: 'circle', x: p.x, z: p.z, rx: rx * 1.1, rz: rz * 1.1, pad: 2.0, strength: 0.36 });
+        decals.push({ x: p.x, z: p.z, sx: rx * 2.45, sz: rz * 2.45, ry: p.ry || 0 });
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      this.stageGroup.add(inst);
+      this.sunOccluders.push(inst);
+    };
+
+    buildInst(list0, geo0);
+    buildInst(list1, geo1);
   }
 
+  // ============================================================================
+  // NATURAL GROUNDED STRATIFIED MESAS & CLIFFS (Zero washed-out pale bottom!)
+  // ============================================================================
   _createStratifiedMesaGeo() {
-    const mesaGeo = new THREE.CylinderGeometry(0.54, 1.08, 1.0, 16, 8, false);
+    const mesaGeo = new THREE.CylinderGeometry(0.52, 1.16, 1.0, 20, 10, false);
     mesaGeo.translate(0, 0.5, 0);
     const mp = mesaGeo.attributes.position;
     for (let i = 0; i < mp.count; i++) {
@@ -571,29 +682,33 @@ export class StageManager {
       if (r0 > 1e-5) {
         const ang = Math.atan2(z, x);
         const targetR = getMesaVisualRadiusAt(ang, y);
-        const baseLin = 1.08 + (0.54 - 1.08) * y;
+        const baseLin = 1.16 + (0.52 - 1.16) * y;
         const mult = r0 >= baseLin * 0.9 ? targetR / r0 : targetR / Math.max(0.01, baseLin);
         mp.setXYZ(i, x * mult, y, z * mult);
       }
     }
     mesaGeo.computeVertexNormals();
-    bakeRockContactAO(mesaGeo, { bottomAO: 0.52, topLift: 1.03, undersideAO: 0.25 });
+    bakeRockContactAO(mesaGeo, { bottomAO: 0.58, topLift: 1.04, undersideAO: 0.24 });
     return mesaGeo;
   }
 
   _placeStratifiedMesas(mesas, occluders, stageId, addColliders = true) {
     if (!mesas.length) return;
+    const atmos = STAGE_ATMOSPHERES[stageId];
     const mesaGeo = this._createStratifiedMesaGeo();
-    const pbr = this.tex.loadPBRSet('sandstone_rock', 4, 2);
-    const mesaMat = new THREE.MeshLambertMaterial({
+    const pbr = this.tex.loadPBRSet('sandstone_rock', 5, 3);
+    const mesaMat = new THREE.MeshStandardMaterial({
       map: pbr.map,
-      normalMap: IS_MOBILE ? null : pbr.normalMap,
-      normalScale: new THREE.Vector2(0.85, 0.85),
+      normalMap: pbr.normalMap,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.94,
+      metalness: 0.02,
       vertexColors: true,
-      color: DESERT_PALETTE.mesaBase,
+      color: atmos.rockTint,
     });
-    mesaMat.name = `mesa_strata_s${stageId}`;
+    mesaMat.name = `mesa_strata_v6_s${stageId}`;
 
+    // Rich crisp geological strata all the way down into the ground + warm contact grounding (ZERO washed-out pale skirt!)
     mesaMat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\nvarying vec3 vMesaWorldPos;\nvarying float vMesaLocalY;`)
@@ -613,25 +728,25 @@ export class StageManager {
           '#include <color_fragment>',
           `#include <color_fragment>
            float _ml = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-           diffuseColor.rgb = mix(vec3(_ml), diffuseColor.rgb, 0.62);
-           float bandCoord = vMesaWorldPos.y * 0.45 + sin(vMesaWorldPos.x * 0.03 + vMesaWorldPos.z * 0.025) * 0.75;
-           float strata1 = sin(bandCoord * 3.2) * 0.5 + 0.5;
-           float strata2 = sin(bandCoord * 9.0 + 1.3) * 0.5 + 0.5;
-           vec3 paleLimestone = vec3(0.76, 0.65, 0.50);
-           vec3 erodedOchre   = vec3(0.50, 0.37, 0.25);
-           vec3 strataTint = mix(erodedOchre, paleLimestone, strata1 * 0.65 + strata2 * 0.35);
-           diffuseColor.rgb *= mix(vec3(0.85), strataTint * 1.38, 0.72);
-           // Base sand-dust blend + contact AO darkening where cliff meets ground
-           float baseDust = smoothstep(0.26, 0.01, vMesaLocalY);
-           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.58, 0.48, 0.35), baseDust * 0.48);`
+           diffuseColor.rgb = mix(vec3(_ml), diffuseColor.rgb, 0.65);
+           float bandCoord = vMesaWorldPos.y * 0.52 + sin(vMesaWorldPos.x * 0.035 + vMesaWorldPos.z * 0.03) * 0.85;
+           float strata1 = sin(bandCoord * 3.0) * 0.5 + 0.5;
+           float strata2 = sin(bandCoord * 8.5 + 1.3) * 0.5 + 0.5;
+           vec3 warmSandstone = vec3(0.84, 0.72, 0.56);
+           vec3 deepOchre     = vec3(0.56, 0.42, 0.30);
+           vec3 strataTint = mix(deepOchre, warmSandstone, strata1 * 0.64 + strata2 * 0.36);
+           diffuseColor.rgb *= mix(vec3(0.86), strataTint * 1.32, 0.72);
+           // Natural subtle ground-contact sand-crevice darkening (NEVER pale washed-out!)
+           float baseCrevice = smoothstep(0.18, 0.0, vMesaLocalY);
+           diffuseColor.rgb *= (1.0 - baseCrevice * 0.18);`
         );
     };
     attachDesertGrading(mesaMat, {
-      saturation: 0.80,
-      contrast: 1.04,
-      aerialStrength: stageId === 2 ? 0.32 : 0.48,
-      aerialStart: 60,
-      aerialEnd: 230,
+      saturation: 0.84,
+      contrast: 1.03,
+      aerialStrength: stageId === 2 ? 0.26 : 0.42,
+      aerialStart: 68,
+      aerialEnd: 245,
     });
 
     const inst = new THREE.InstancedMesh(mesaGeo, mesaMat, mesas.length);
@@ -641,69 +756,45 @@ export class StageManager {
     const dummy = this._dummy;
     mesas.forEach((m, idx) => {
       const gy = m.y !== undefined ? m.y : this.getHeight(m.x, m.z);
-      dummy.position.set(m.x, gy - 4.5, m.z);
+      // Plant 7.5m deep into terrain so flared talus meets the desert smoothly from EVERY angle!
+      dummy.position.set(m.x, gy - 7.5, m.z);
       dummy.rotation.set(0, m.ry || 0, 0);
-      dummy.scale.set(m.sx, m.sy, m.sz);
+      dummy.scale.set(m.sx, m.sy + 3.0, m.sz);
       dummy.updateMatrix();
       inst.setMatrixAt(idx, dummy.matrix);
 
       if (addColliders) {
-        this.physics.addMesaCollider(m.x, m.z, m.sx, m.sz, m.ry || 0, gy, m.sy);
+        this.physics.addMesaCollider(m.x, m.z, m.sx, m.sz, m.ry || 0, gy - 3.0, m.sy + 3.0);
       }
-      occluders.push({ type: 'circle', x: m.x, z: m.z, rx: m.sx * 1.15, rz: m.sz * 1.15, pad: 4.5, strength: 0.42 });
+      occluders.push({ type: 'circle', x: m.x, z: m.z, rx: m.sx * 1.25, rz: m.sz * 1.25, pad: 5.5, strength: 0.44 });
     });
     inst.instanceMatrix.needsUpdate = true;
     this.stageGroup.add(inst);
+    this.sunOccluders.push(inst);
   }
 
-  _placeScannedRocks(placements, occluders, decals) {
-    if (!placements.length) return;
-    const geo0 = this.models.getGeometry('rock_07');
-    const mat0 = this.models.getMaterial('rock_07');
-    const geo1 = this.models.getGeometry('rock_09') || geo0;
-    const mat1 = this.models.getMaterial('rock_09') || mat0;
-    if (!geo0 || !mat0) return;
-
-    const list0 = placements.filter((p) => (p.type || 0) === 0);
-    const list1 = placements.filter((p) => (p.type || 0) === 1);
-    const dummy = this._dummy;
-
-    const buildInst = (list, geo, mat, type) => {
-      if (!list.length) return;
-      const inst = new THREE.InstancedMesh(geo, mat, list.length);
-      inst.castShadow = !IS_MOBILE;
-      inst.receiveShadow = true;
-      list.forEach((p, i) => {
-        const y = this.getHeight(p.x, p.z);
-        const sink = p.sy * 0.05;
-        dummy.position.set(p.x, y - sink, p.z);
-        dummy.rotation.set(0, p.ry || 0, 0);
-        dummy.scale.set(p.sx, p.sy, p.sz);
-        dummy.updateMatrix();
-        inst.setMatrixAt(i, dummy.matrix);
-
-        const rx = p.sx * 0.265;
-        const rz = p.sz * 0.49;
-        const maxHFactor = type === 0 ? 0.44 : 0.23;
-        const topY = y - sink + p.sy * maxHFactor;
-        this.physics.addEllipseCollider(p.x, p.z, rx, rz, p.ry || 0, topY, p.climbable !== false);
-        occluders.push({ type: 'circle', x: p.x, z: p.z, rx: rx * 1.05, rz: rz * 1.05, pad: 1.8, strength: 0.36 });
-        decals.push({ x: p.x, z: p.z, sx: rx * 2.15, sz: rz * 2.15, ry: p.ry || 0 });
-      });
-      inst.instanceMatrix.needsUpdate = true;
-      this.stageGroup.add(inst);
-    };
-
-    buildInst(list0, geo0, mat0, 0);
-    buildInst(list1, geo1, mat1, 1);
-  }
-
+  // ============================================================================
+  // REALISTIC ARABIAN DATE PALMS (Feathered Pinnate Fronds + Ringed Bark Trunks!)
+  // ============================================================================
   _placeDesertPalms(palmSites, occluders, decals) {
     if (!palmSites.length) return;
-    const woodPbr = this.tex.loadPBRSet('desert_wood', 1, 3);
-    const trunkMat = new THREE.MeshLambertMaterial({ map: woodPbr.map, vertexColors: true, color: 0x8e7457 });
+    const barkTex = this.tex.createPalmBarkTexture();
+    const trunkMat = new THREE.MeshStandardMaterial({
+      map: barkTex,
+      roughness: 0.94,
+      metalness: 0.0,
+      vertexColors: true,
+      color: 0xd8c6ae,
+    });
+    attachDesertGrading(trunkMat, { saturation: 0.88, contrast: 1.02 });
 
-    const frondMat = new THREE.MeshLambertMaterial({ color: 0x56643a, side: THREE.DoubleSide });
+    const frondTex = this.tex.createPalmFrondTexture();
+    const frondMat = new THREE.MeshLambertMaterial({
+      map: frondTex,
+      alphaTest: 0.36,
+      side: THREE.DoubleSide,
+      color: 0xe2e4c8,
+    });
     frondMat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = this.palmTimeUniform;
       shader.uniforms.uStorm = this.palmStormUniform;
@@ -713,32 +804,45 @@ export class StageManager {
           '#include <begin_vertex>',
           `#include <begin_vertex>
            float tipDist = length(position.xz);
-           float swayAmp = (0.042 + uStorm * 0.16) * tipDist;
-           float swayFreq = 1.45 + uStorm * 2.8;
-           float phase = instanceMatrix[3][0] * 0.3 + instanceMatrix[3][2] * 0.2;
-           transformed.x += (sin(uTime * swayFreq + phase) + uStorm * 0.5) * swayAmp;
-           transformed.y += cos(uTime * swayFreq * 0.85 + phase) * swayAmp * 0.5;`
+           float swayAmp = (0.04 + uStorm * 0.14) * tipDist;
+           float swayFreq = 1.4 + uStorm * 2.2;
+           float phase = instanceMatrix[3][0] * 0.25 + instanceMatrix[3][2] * 0.25;
+           transformed.x += sin(uTime * swayFreq + phase) * swayAmp;
+           transformed.y += cos(uTime * swayFreq * 0.8 + phase) * swayAmp * 0.45;`
         );
     };
 
+    // Build lush 18-frond 2-tier gracefully arching & drooping date-palm crown!
     const frondParts = [];
-    const frondCount = 12;
-    for (let f = 0; f < frondCount; f++) {
-      const fGeo = new THREE.PlaneGeometry(0.62, 2.75, 2, 4);
+    const buildFrond = (length, width, yaw, startPitch, droop) => {
+      const fGeo = new THREE.PlaneGeometry(width, length, 2, 7);
       const fp = fGeo.attributes.position;
       for (let i = 0; i < fp.count; i++) {
-        const y = fp.getY(i);
-        const t = (y + 1.375) / 2.75;
-        fp.setX(i, fp.getX(i) * Math.sin(t * Math.PI) * 1.18);
-        fp.setZ(i, -t * t * 0.8);
+        const rawY = fp.getY(i);
+        const t = THREE.MathUtils.clamp((rawY + length * 0.5) / length, 0, 1); // 0 at stem base -> 1 at tip
+        // Natural parabolic gravity arch: rises gently near stem, then gracefully curves OUT & DOWN!
+        const archOut = t * length;
+        const archUp = Math.sin(t * Math.PI * 0.78) * (length * 0.32) - Math.pow(t, 2.2) * droop;
+        // Subtle V-fold along center rachis so frond has real 3D depth!
+        const vx = fp.getX(i);
+        const vFold = -Math.abs(vx) * 0.24;
+        fp.setXYZ(i, vx, archUp + vFold, archOut);
       }
-      fGeo.translate(0, 1.375, 0);
-      const m = new THREE.Matrix4().makeRotationFromEuler(
-        new THREE.Euler(0.72 + (f % 3) * 0.22, (f / frondCount) * Math.PI * 2, 0, 'YXZ')
-      );
+      const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(startPitch, yaw, 0, 'YXZ'));
       fGeo.applyMatrix4(m);
       fGeo.computeVertexNormals();
-      frondParts.push(fGeo);
+      return fGeo;
+    };
+
+    // Upper sunlit canopy ring (8 fronds arching gently upward & outward)
+    for (let i = 0; i < 8; i++) {
+      const yaw = (i / 8) * Math.PI * 2 + 0.2;
+      frondParts.push(buildFrond(3.4, 1.35, yaw, -0.32, 0.72));
+    }
+    // Mid-lower lush drooping canopy ring (10 wider fronds gracefully draping downward!)
+    for (let i = 0; i < 10; i++) {
+      const yaw = (i / 10) * Math.PI * 2 + 0.55;
+      frondParts.push(buildFrond(4.0, 1.55, yaw, 0.05, 1.48));
     }
     const crownGeo = mergeGeometries(frondParts, false);
     frondParts.forEach((g) => g.dispose());
@@ -746,35 +850,49 @@ export class StageManager {
     const crownInst = new THREE.InstancedMesh(crownGeo, frondMat, palmSites.length);
     crownInst.castShadow = !IS_MOBILE;
 
+    // Warm golden date clusters + fibrous crown collar at top of trunk
+    const dateCollarMat = new THREE.MeshLambertMaterial({ color: 0x9c7238 });
+    const collarGeos = [];
     const trunkGeos = [];
     const dummy = this._dummy;
+
     palmSites.forEach((p, idx) => {
       const gy = this.getHeight(p.x, p.z);
-      const tGeo = new THREE.CylinderGeometry(0.14, 0.31, p.h, 7, 5);
+      // Curved organic ringed palm trunk with natural flared root base
+      const tGeo = new THREE.CylinderGeometry(0.18, 0.34, p.h + 0.8, 9, 8);
       const tp = tGeo.attributes.position;
       for (let i = 0; i < tp.count; i++) {
-        const ny = (tp.getY(i) + p.h * 0.5) / p.h;
-        tp.setX(i, tp.getX(i) + ny * ny * p.h * p.lean);
+        const ny = (tp.getY(i) + (p.h + 0.8) * 0.5) / (p.h + 0.8);
+        const rootFlair = ny < 0.18 ? 1.0 + (0.18 - ny) * 1.4 : 1.0;
+        tp.setX(i, tp.getX(i) * rootFlair + ny * ny * p.h * p.lean);
+        tp.setZ(i, tp.getZ(i) * rootFlair);
       }
-      tGeo.translate(0, p.h * 0.5, 0);
-      bakeRockContactAO(tGeo, { bottomAO: 0.50, topLift: 1.0, undersideAO: 0.1 });
+      tGeo.translate(0, (p.h + 0.8) * 0.5 - 0.6, 0);
+      bakeRockContactAO(tGeo, { bottomAO: 0.58, topLift: 1.02, undersideAO: 0.12 });
       const m = new THREE.Matrix4().makeRotationY(p.ry);
-      m.setPosition(p.x, gy - 0.12, p.z);
+      m.setPosition(p.x, gy, p.z);
       tGeo.applyMatrix4(m);
       tGeo.computeVertexNormals();
       trunkGeos.push(tGeo);
 
       const topX = p.x + Math.cos(p.ry) * (p.h * p.lean);
       const topZ = p.z - Math.sin(p.ry) * (p.h * p.lean);
-      dummy.position.set(topX, gy + p.h - 0.22, topZ);
+
+      // Fibrous crown heart / hanging dates
+      const cGeo = new THREE.SphereGeometry(0.42, 8, 6);
+      cGeo.scale(1.0, 1.35, 1.0);
+      cGeo.translate(topX, gy + p.h - 0.38, topZ);
+      collarGeos.push(cGeo);
+
+      dummy.position.set(topX, gy + p.h - 0.12, topZ);
       dummy.rotation.set(0, p.ry, 0);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
       crownInst.setMatrixAt(idx, dummy.matrix);
 
-      this.physics.addCylinderCollider(p.x, p.z, 0.34, gy + p.h, false);
-      occluders.push({ type: 'circle', x: p.x, z: p.z, r: 0.85, pad: 2.2, strength: 0.32 });
-      decals.push({ x: p.x, z: p.z, sx: 2.8, sz: 2.8, ry: p.ry });
+      this.physics.addCylinderCollider(p.x, p.z, 0.36, gy + p.h, false);
+      occluders.push({ type: 'circle', x: p.x, z: p.z, r: 0.9, pad: 2.2, strength: 0.34 });
+      decals.push({ x: p.x, z: p.z, sx: 3.0, sz: 3.0, ry: p.ry });
     });
     crownInst.instanceMatrix.needsUpdate = true;
 
@@ -782,34 +900,46 @@ export class StageManager {
     mergedTrunks.castShadow = !IS_MOBILE;
     mergedTrunks.receiveShadow = true;
     trunkGeos.forEach((g) => g.dispose());
-    this.stageGroup.add(mergedTrunks, crownInst);
+
+    const mergedCollars = new THREE.Mesh(mergeGeometries(collarGeos, false), dateCollarMat);
+    collarGeos.forEach((g) => g.dispose());
+
+    this.stageGroup.add(mergedTrunks, mergedCollars, crownInst);
   }
 
   _placeDesertShrubs(sites) {
     if (!sites.length) return;
-    const branches = [];
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2 + 0.3;
-      const tilt = 0.48 + (i % 2) * 0.24;
-      const h = 0.44 + (i % 3) * 0.14;
-      const cone = new THREE.ConeGeometry(0.032, h, 3, 1);
-      cone.translate(0, h * 0.5, 0);
-      cone.rotateZ(tilt);
-      cone.rotateY(angle);
-      branches.push(cone);
+    // Soft sun-bleached Arabian desert scrub bushes (rimth / haloxylon) instead of spiky dark cones!
+    const puffs = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.4;
+      const r = i === 0 ? 0.0 : 0.24;
+      const rad = i === 0 ? 0.30 : 0.21 + (i % 2) * 0.05;
+      const puff = new THREE.IcosahedronGeometry(rad, 1);
+      const pos = puff.attributes.position;
+      for (let k = 0; k < pos.count; k++) {
+        const vx = pos.getX(k);
+        const vy = pos.getY(k);
+        const vz = pos.getZ(k);
+        const jit = 0.84 + 0.28 * Math.abs(Math.sin(vx * 9.3 + vz * 7.1 + i));
+        pos.setXYZ(k, vx * jit * 1.18, vy * jit * 0.68, vz * jit * 1.18);
+      }
+      puff.computeVertexNormals();
+      puff.translate(Math.cos(a) * r, rad * 0.42, Math.sin(a) * r);
+      puffs.push(puff);
     }
-    const mergedGeo = mergeGeometries(branches, false);
-    branches.forEach((b) => b.dispose());
-    const shrubMat = new THREE.MeshLambertMaterial({ color: 0x726143 });
+    const mergedGeo = mergeGeometries(puffs, false);
+    puffs.forEach((b) => b.dispose());
+    const shrubMat = new THREE.MeshLambertMaterial({ color: 0xa29368 });
     const inst = new THREE.InstancedMesh(mergedGeo, shrubMat, sites.length);
 
     const dummy = this._dummy;
     sites.forEach((s, idx) => {
       const y = this.getHeight(s.x, s.z);
       const sc = s.scale ?? 1.0;
-      dummy.position.set(s.x, y - 0.04, s.z);
+      dummy.position.set(s.x, y - 0.05, s.z);
       dummy.rotation.set(0, s.ry ?? idx, 0);
-      dummy.scale.set(sc * 1.2, sc * 0.88, sc * 1.2);
+      dummy.scale.set(sc * 1.1, sc * 0.85, sc * 1.1);
       dummy.updateMatrix();
       inst.setMatrixAt(idx, dummy.matrix);
     });
@@ -817,7 +947,7 @@ export class StageManager {
     this.stageGroup.add(inst);
   }
 
-  _createSoaringHawks(centerZ = 0, altitudeBase = 24) {
+  _createSoaringHawks(centerZ = 0, altitudeBase = 26) {
     const birdMat = new THREE.MeshBasicMaterial({ color: 0x261a10, side: THREE.DoubleSide });
     const rawBody = new THREE.ConeGeometry(0.11, 0.72, 4);
     rawBody.rotateX(Math.PI / 2);
@@ -842,32 +972,14 @@ export class StageManager {
 
     for (let i = 0; i < 4; i++) {
       this.hawks.push({
-        centerX: (i % 2 === 0 ? -12 : 14),
+        centerX: i % 2 === 0 ? -14 : 16,
         centerZ: centerZ + (i - 1.5) * 38,
-        radius: 24 + i * 9,
+        radius: 26 + i * 9,
         altitude: altitudeBase + i * 5,
         speed: 0.21 + i * 0.035,
         phase: i * 1.65,
       });
     }
-  }
-
-  _createGoalBeaconMarker(x, y, z, stageId) {
-    const col = stageId === 3 ? 0xffb366 : 0xffe096;
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.45, 0.62, 24),
-      new THREE.MeshBasicMaterial({
-        color: col,
-        transparent: true,
-        opacity: 0.72,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
-    ring.position.set(x, y, z);
-    ring.renderOrder = 8;
-    this.goalRingMesh = ring;
-    this.stageGroup.add(ring);
   }
 
   _createGlowSpriteTexture() {
@@ -889,203 +1001,271 @@ export class StageManager {
   }
 
   // ============================================================================
-  // STAGE 1 (NOON): Open Mirage Plains — Stone Cairns + Cracked Sabkha + Monolith Gate
+  // STAGE 1 (NOON): Abandoned Bedouin Camp + Carved Sabkha Stele + Twin Monolith Gate
   // ============================================================================
   _buildStage1Plains(occluders, decals) {
-    // 1. Guiding Arabian Stone Cairns (رُجُم حجرية) from spawn (0,114) across the cracked sabkha to (6,-116)
-    const cairnSites = [
-      { x: 2.5, z: 96, scale: 1.12, ry: 0.4 },
-      { x: -5.2, z: 72, scale: 1.05, ry: 1.5 },
-      { x: 4.5, z: 48, scale: 1.18, ry: 2.2 },
-      { x: 9.5, z: 22, scale: 1.02, ry: 0.8 },   // Entering cracked sabkha edge!
-      { x: -3.0, z: -2, scale: 1.24, ry: 1.9 },  // Center of cracked sabkha!
-      { x: 8.8, z: -26, scale: 1.08, ry: 3.1 },
-      { x: 1.8, z: -52, scale: 1.15, ry: 0.6 },  // Leaving sabkha onto dunes
-      { x: -4.2, z: -78, scale: 1.12, ry: 2.4 },
-      { x: 5.0, z: -100, scale: 1.28, ry: 1.1 }, // Canyon gate approach cairn
-      { x: -24.0, z: 12, scale: 0.95, ry: 0.2 }, // Off-trail exploration cairn
-      { x: 28.0, z: -18, scale: 0.98, ry: 2.7 },
-    ];
-    this._placeStoneCairns(cairnSites, occluders, decals);
+    const wood = this.tex.loadPBRSet('desert_wood', 1, 1);
+    const woodMat = new THREE.MeshLambertMaterial({ map: wood.map, color: 0xb49978 });
+    const fab = this.tex.loadPBRSet('tattered_fabric', 2, 2);
+    const fabMat = new THREE.MeshLambertMaterial({ map: fab.map, side: THREE.DoubleSide, color: 0xd4be9c });
+    const stonePbr = this.tex.loadPBRSet('sandstone_rock', 2, 2);
+    const steleMat = new THREE.MeshStandardMaterial({
+      map: stonePbr.map,
+      normalMap: stonePbr.normalMap,
+      roughness: 0.9,
+      vertexColors: true,
+      color: 0xe6d6bc,
+    });
+    const paperMat = new THREE.MeshLambertMaterial({ color: 0xefe1be, side: THREE.DoubleSide });
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd1a44a, roughness: 0.35, metalness: 0.8 });
 
-    // 2. Monumental Twin Sandstone Monoliths framing the Canyon Mouth exit at (6, -116) + Distant Horizon Mesas
+    // --- LANDMARK 1.1: Abandoned Bedouin Caravan Camp (-14, 72) with shade canopy, embers firepit, crates & note! ---
+    const cx = -14;
+    const cz = 72;
+    const cy = this.getHeight(cx, cz);
+    const campGroup = new THREE.Group();
+    campGroup.position.set(cx, cy, cz);
+    campGroup.rotation.y = 0.38;
+
+    // 4 weathered tent posts + sun-bleached cloth awning
+    [[-1.8, -1.3], [1.8, -1.3], [-1.8, 1.3], [1.8, 1.3]].forEach(([px, pz]) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 2.4, 6), woodMat);
+      post.position.set(px, 1.15, pz);
+      campGroup.add(post);
+    });
+    const awning = new THREE.Mesh(new THREE.PlaneGeometry(3.9, 2.9, 5, 4), fabMat);
+    awning.rotation.x = -Math.PI / 2 + 0.14;
+    awning.position.set(0, 2.28, 0);
+    campGroup.add(awning);
+
+    // Stone-ringed firepit with glowing warm embers right in front of canopy!
+    const emberMat = new THREE.MeshBasicMaterial({ color: 0xff6e24 });
+    const emberDisc = new THREE.Mesh(new THREE.CircleGeometry(0.55, 10), emberMat);
+    emberDisc.rotation.x = -Math.PI / 2;
+    emberDisc.position.set(0.2, 0.05, 2.4);
+    campGroup.add(emberDisc);
+    const fireLight = new THREE.PointLight(0xff7e30, 2.2, 7.5, 1.8);
+    fireLight.position.set(0.2, 0.45, 2.4);
+    campGroup.add(fireLight);
+
+    // Supply crate + Salem's torn note resting on top
+    const campCrate = this.models.createMesh('crate', 1.25);
+    if (campCrate) {
+      campCrate.position.set(-0.7, 0, -0.3);
+      campGroup.add(campCrate);
+    }
+    const campBarrel = this.models.createMesh('barrel', 0.72);
+    if (campBarrel) {
+      campBarrel.position.set(1.05, 0, -0.5);
+      campGroup.add(campBarrel);
+    }
+    const noteSheet = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.28), paperMat);
+    noteSheet.rotation.x = -Math.PI / 2;
+    noteSheet.position.set(-0.7, 0.56, -0.3);
+    campGroup.add(noteSheet);
+    this.stageGroup.add(campGroup);
+    this.physics.addBoxCollider(cx - 1.6, cx + 1.6, cz - 1.4, cz + 1.4, cy, cy + 1.1, true);
+    occluders.push({ type: 'box', x: cx, z: cz, hx: 2.2, hz: 1.8, pad: 2.2, strength: 0.34 });
+    this.spatialAudioSpots.push({ type: 'campfire', x: cx, y: cy, z: cz + 2.2 });
+
+    this.stageInteractables.push({
+      id: 'camp_clue',
+      label: 'قراءة رسالة سالم في المعسكر',
+      worldPos: new THREE.Vector3(cx - 0.5, cy + 0.8, cz - 0.2),
+      radius: 4.5,
+    });
+
+    // --- LANDMARK 1.2: Ancient Carved Sabkha Boundary Stele (14, -8) with Salem's Brass Pocket Watch! ---
+    const sx = 14;
+    const sz = -8;
+    const sy = this.getHeight(sx, sz);
+    const steleGroup = new THREE.Group();
+    steleGroup.position.set(sx, sy, sz);
+    const basePlinth = new THREE.Mesh(createBakedArchitecturalBox(1.9, 0.7, 1.5, { bottomAO: 0.54 }), steleMat);
+    basePlinth.position.y = 0.25;
+    const monolith = new THREE.Mesh(createBakedArchitecturalBox(0.95, 2.75, 0.55, { bottomAO: 0.56 }), steleMat);
+    monolith.position.set(0, 1.85, -0.15);
+    monolith.rotation.z = 0.04;
+    // Glinting brass pocket-watch box resting on the front ledge!
+    const watch = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.06, 12), brassMat);
+    watch.position.set(0.15, 0.63, 0.42);
+    steleGroup.add(basePlinth, monolith, watch);
+    this.stageGroup.add(steleGroup);
+    this.sunOccluders.push(steleGroup);
+    this.physics.addBoxCollider(sx - 1.0, sx + 1.0, sz - 0.85, sz + 0.85, sy, sy + 3.2, false);
+    occluders.push({ type: 'box', x: sx, z: sz, hx: 1.2, hz: 1.0, pad: 2.4, strength: 0.38 });
+    decals.push({ x: sx, z: sz, sx: 3.4, sz: 3.0, ry: 0 });
+
+    this.stageInteractables.push({
+      id: 'sabkha_stele',
+      label: 'فحص الشاهد الحجري وساعة سالم',
+      worldPos: new THREE.Vector3(sx, sy + 1.1, sz + 0.4),
+      radius: 4.5,
+    });
+
+    // --- Grounded Twin Sandstone Canyon Entrance Cliffs + Framing Horizon Mesas ---
     const mesas = [
-      // Twin canyon mouth gate pillars!
-      { x: -11.5, z: -120, sx: 11.5, sy: 18.0, sz: 10.5, ry: 0.5 },
-      { x: 23.5, z: -118, sx: 12.0, sy: 19.5, sz: 11.0, ry: 1.7 },
-      // Distant framing desert mesas
-      { x: -128, z: -98, sx: 44, sy: 26, sz: 32, ry: 0.4 },
-      { x: 122, z: -110, sx: 48, sy: 28, sz: 36, ry: 2.0 },
-      { x: -136, z: 34, sx: 46, sy: 24, sz: 34, ry: 2.5 },
-      { x: 134, z: 46, sx: 42, sy: 23, sz: 32, ry: 1.1 },
+      { x: -13.5, z: -116, sx: 12.5, sy: 21.0, sz: 11.5, ry: 0.5 },
+      { x: 21.5, z: -114, sx: 13.0, sy: 22.5, sz: 12.0, ry: 1.7 },
+      { x: -128, z: -98, sx: 44, sy: 28, sz: 34, ry: 0.4 },
+      { x: 122, z: -110, sx: 48, sy: 30, sz: 38, ry: 2.0 },
+      { x: -136, z: 34, sx: 46, sy: 26, sz: 36, ry: 2.5 },
+      { x: 134, z: 46, sx: 42, sy: 25, sz: 34, ry: 1.1 },
     ];
     this._placeStratifiedMesas(mesas, occluders, 1, true);
 
-    // 3. Natural weathered boulders framing dunes & sabkha rim
-    const rocks = [
-      { x: -9.5, z: 102, sx: 4.8, sy: 2.4, sz: 3.4, ry: 0.7, type: 0 },
-      { x: 11.0, z: 86, sx: 5.4, sy: 2.8, sz: 3.8, ry: 2.1, type: 1 },
-      { x: -16.5, z: 54, sx: 6.8, sy: 3.6, sz: 4.6, ry: 1.2, type: 0 },
-      { x: 19.5, z: 36, sx: 5.8, sy: 2.9, sz: 4.2, ry: 0.3, type: 1 },
-      { x: -28.0, z: -14, sx: 7.4, sy: 4.0, sz: 5.2, ry: 2.6, type: 0 },
-      { x: 26.5, z: -38, sx: 6.2, sy: 3.2, sz: 4.4, ry: 1.8, type: 1 },
-      { x: -14.5, z: -68, sx: 6.5, sy: 3.4, sz: 4.4, ry: 0.9, type: 0 },
-      { x: 18.2, z: -88, sx: 7.0, sy: 3.8, sz: 4.8, ry: 2.4, type: 0 },
+    // --- Watertight Sculpted Desert Boulders (ZERO hollow scans, ZERO stacked pyramids!) ---
+    const boulders = [
+      { x: -10.5, z: 98, sx: 2.2, sy: 1.4, sz: 1.8, ry: 0.6, type: 0 },
+      { x: 12.0, z: 84, sx: 2.6, sy: 1.6, sz: 2.0, ry: 2.0, type: 1 },
+      { x: -20.5, z: 52, sx: 3.2, sy: 2.0, sz: 2.5, ry: 1.2, type: 0 },
+      { x: 22.0, z: 32, sx: 2.8, sy: 1.7, sz: 2.2, ry: 0.4, type: 1 },
+      { x: -26.0, z: -22, sx: 3.5, sy: 2.2, sz: 2.6, ry: 2.5, type: 0 },
+      { x: 26.5, z: -42, sx: 3.0, sy: 1.9, sz: 2.3, ry: 1.8, type: 1 },
+      { x: -15.5, z: -74, sx: 3.4, sy: 2.1, sz: 2.5, ry: 0.9, type: 0 },
+      { x: 17.5, z: -88, sx: 3.2, sy: 2.0, sz: 2.4, ry: 2.3, type: 1 },
     ];
-    let seed = 1051;
+    let seed = 1097;
     const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-    for (let i = 0; i < 24; i++) {
-      const x = (rand() - 0.5) * 185;
-      const z = (rand() - 0.5) * 210;
-      if (Math.abs(x) < 12 && z > -115 && z < 118) continue;
-      if (getStage1SabkhaMask(x, z) > 0.55) continue; // Keep cracked sabkha open & clean!
-      const s = 2.0 + rand() * 4.5;
-      rocks.push({ x, z, sx: s * 1.1, sy: s * 0.7, sz: s * 0.9, ry: rand() * 6.28, type: i % 2 });
+    for (let i = 0; i < 20; i++) {
+      const x = (rand() - 0.5) * 180;
+      const z = (rand() - 0.5) * 200;
+      if (Math.hypot(x - cx, z - cz) < 8 || Math.hypot(x - sx, z - sz) < 8) continue;
+      if (getStage1SabkhaMask(x, z) > 0.50) continue;
+      const s = 1.4 + rand() * 2.4;
+      boulders.push({ x, z, sx: s * 1.15, sy: s * 0.72, sz: s * 0.95, ry: rand() * 6.28, type: i % 2 });
     }
-    this._placeScannedRocks(rocks, occluders, decals);
+    this._placeSolidBoulders(boulders, occluders, decals, 1);
 
-    // 4. Sparse sun-bleached desert shrubs around dune edges (not inside salt flat)
     const shrubs = [];
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < 38; i++) {
       const x = (rand() - 0.5) * 160;
-      const z = (rand() - 0.5) * 210;
+      const z = (rand() - 0.5) * 200;
       if (getStage1SabkhaMask(x, z) > 0.35) continue;
-      shrubs.push({ x, z, scale: 0.75 + rand() * 0.9, ry: rand() * 6.28 });
+      shrubs.push({ x, z, scale: 0.75 + rand() * 0.85, ry: rand() * 6.28 });
     }
     this._placeDesertShrubs(shrubs);
-    this._createSoaringHawks(0, 26);
+    this._createSoaringHawks(0, 28);
   }
 
   // ============================================================================
-  // STAGE 2 (AFTERNOON): Winding Rocky Canyon — Stratified Cliffs, Palms, Ruins & Light Dust Gusts
+  // STAGE 2 (AFTERNOON): Wide Rocky Canyon + Stratified Cliffs + Realistic Palm Oasis + Ruins!
   // ============================================================================
   _buildStage2Canyon(occluders, decals) {
-    // 1. Towering Stratified Canyon Buttress Cliffs anchored deeply into canyon floor level (ZERO floating bases!)
+    // 1. Deeply anchored towering stratified cliffs strictly outside wide walkable canyon floor
     const cliffButtresses = [];
-    for (let z = 112; z >= -124; z -= 20) {
+    for (let z = 112; z >= -122; z -= 20) {
       const cx = getCanyonCenterX(z);
       const hw = getCanyonHalfWidth(z);
       const floorY = this.getHeight(cx, z);
-      // Left wall cliff buttress anchored directly into floorY - 3m!
       cliffButtresses.push({
-        x: cx - hw - 12.5 - Math.sin(z * 0.13) * 2.5,
+        x: cx - hw - 14.5 - Math.sin(z * 0.13) * 2.0,
         z: z + 3,
-        y: floorY - 2.5,
-        sx: 15.5 + (Math.abs(z) % 5),
-        sy: 38 + ((Math.abs(z) * 7) % 12),
-        sz: 14.5,
+        y: floorY - 2.0,
+        sx: 16.0 + (Math.abs(z) % 5),
+        sy: 40 + ((Math.abs(z) * 7) % 12),
+        sz: 15.0,
         ry: (z * 0.17) % 6.28,
       });
-      // Right wall cliff buttress anchored directly into floorY - 3m!
       cliffButtresses.push({
-        x: cx + hw + 12.5 + Math.cos(z * 0.11) * 2.5,
+        x: cx + hw + 14.5 + Math.cos(z * 0.11) * 2.0,
         z: z - 4,
-        y: floorY - 2.5,
-        sx: 16.0 + ((Math.abs(z) + 2) % 5),
-        sy: 40 + ((Math.abs(z) * 5) % 10),
-        sz: 15.0,
+        y: floorY - 2.0,
+        sx: 16.5 + ((Math.abs(z) + 2) % 5),
+        sy: 42 + ((Math.abs(z) * 5) % 10),
+        sz: 15.5,
         ry: (z * 0.23 + 1.2) % 6.28,
       });
     }
     this._placeStratifiedMesas(cliffButtresses, occluders, 2, true);
 
-    // 2. Oasis Date Palm Groves (نخيل) tucked into the central canyon oasis bend (z ≈ -28 .. +12)
+    // 2. Realistic Arabian Date Palm Oasis (with feathered arching fronds & 3D spatial rustling audio!)
+    const oX = getCanyonCenterX(-14);
     const palmSites = [
-      { x: getCanyonCenterX(-4) - 8.8, z: -4, h: 6.8, lean: 0.16, ry: 0.5 },
-      { x: getCanyonCenterX(-9) - 11.2, z: -9, h: 5.4, lean: 0.20, ry: 1.4 },
-      { x: getCanyonCenterX(-14) - 7.5, z: -14, h: 7.4, lean: 0.14, ry: 0.9 },
-      { x: getCanyonCenterX(-18) - 10.6, z: -18, h: 5.9, lean: -0.15, ry: 2.3 },
-      { x: getCanyonCenterX(-6) + 9.4, z: -6, h: 6.2, lean: -0.18, ry: 3.1 },
-      { x: getCanyonCenterX(-15) + 11.0, z: -15, h: 7.1, lean: -0.15, ry: 2.6 },
-      { x: getCanyonCenterX(-23) + 8.6, z: -23, h: 5.2, lean: 0.18, ry: 4.0 },
-      { x: getCanyonCenterX(44) + 10.2, z: 44, h: 5.6, lean: -0.16, ry: 1.9 },
-      { x: getCanyonCenterX(-62) - 9.8, z: -62, h: 6.1, lean: 0.17, ry: 0.8 },
+      { x: oX - 9.5, z: -6, h: 7.2, lean: 0.14, ry: 0.4 },
+      { x: oX - 12.2, z: -12, h: 5.8, lean: 0.18, ry: 1.5 },
+      { x: oX - 8.4, z: -18, h: 7.6, lean: 0.12, ry: 0.9 },
+      { x: oX - 11.4, z: -24, h: 6.2, lean: -0.14, ry: 2.3 },
+      { x: oX + 10.2, z: -8, h: 6.6, lean: -0.16, ry: 3.1 },
+      { x: oX + 12.4, z: -16, h: 7.4, lean: -0.14, ry: 2.6 },
+      { x: oX + 9.2, z: -24, h: 5.6, lean: 0.16, ry: 4.0 },
+      { x: getCanyonCenterX(44) + 12.0, z: 44, h: 6.0, lean: -0.14, ry: 1.9 },
+      { x: getCanyonCenterX(-64) - 11.4, z: -64, h: 6.4, lean: 0.15, ry: 0.8 },
     ];
     this._placeDesertPalms(palmSites, occluders, decals);
+    this.spatialAudioSpots.push({ type: 'palms', x: oX, y: this.getHeight(oX, -14), z: -14 });
 
-    // 3. Ancient Desert Canyon Ruins (أطلال): Crumbled Mudbrick Arches, Walls, Pillars & Weathered Crates/Barrels!
-    this._buildCanyonRuins(occluders, decals);
+    // 3. Ancient Canyon Ruins (squarely on flat rocky plaza!) + Interactive Caravanserai Note + Oasis Well!
+    this._buildCanyonRuinsAndLandmarks(occluders, decals);
 
-    // 4. Trail Cairns & Canyon Floor Boulders
-    const cairns = [
-      { x: getCanyonCenterX(96) + 3.2, z: 96, scale: 1.05, ry: 0.4 },
-      { x: getCanyonCenterX(18) - 3.6, z: 18, scale: 1.12, ry: 1.7 },
-      { x: getCanyonCenterX(-40) + 3.5, z: -40, scale: 1.10, ry: 2.5 },
-      { x: getCanyonCenterX(-98) - 2.8, z: -98, scale: 1.22, ry: 0.9 },
-    ];
-    this._placeStoneCairns(cairns, occluders, decals);
-
-    const rocks = [];
-    let seed = 2207;
+    // 4. Watertight Sculpted Canyon Edge Boulders
+    const boulders = [];
+    let seed = 2293;
     const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-    for (let z = 108; z >= -114; z -= 9.5) {
+    for (let z = 104; z >= -108; z -= 11) {
       const cx = getCanyonCenterX(z);
       const hw = getCanyonHalfWidth(z);
-      // Place canyon floor edge boulders close to cliff talus (keeping central 10m path clean!)
       for (const side of [-1, 1]) {
-        if (rand() < 0.35) continue;
-        const off = (6.8 + rand() * (hw - 7.5)) * side;
-        const s = 2.6 + rand() * 3.8;
-        rocks.push({
+        if (rand() < 0.38) continue;
+        const off = (hw * 0.62 + rand() * 3.8) * side;
+        const s = 1.6 + rand() * 2.2;
+        boulders.push({
           x: cx + off,
           z: z + (rand() - 0.5) * 4.0,
           sx: s * 1.15,
           sy: s * 0.72,
-          sz: s * 0.92,
+          sz: s * 0.95,
           ry: rand() * 6.28,
           type: Math.floor(rand() * 2),
         });
       }
     }
-    this._placeScannedRocks(rocks, occluders, decals);
+    this._placeSolidBoulders(boulders, occluders, decals, 2);
 
-    // 5. Oasis shrubs & canyon hawks
     const shrubs = [];
-    for (let i = 0; i < 38; i++) {
-      const z = -112 + rand() * 224;
+    for (let i = 0; i < 34; i++) {
+      const z = -108 + rand() * 216;
       const cx = getCanyonCenterX(z);
       const hw = getCanyonHalfWidth(z);
-      const x = cx + (rand() - 0.5) * hw * 1.65;
-      shrubs.push({ x, z, scale: 0.8 + rand() * 0.85, ry: rand() * 6.28 });
+      shrubs.push({ x: cx + (rand() - 0.5) * hw * 1.45, z, scale: 0.8 + rand() * 0.8, ry: rand() * 6.28 });
     }
     this._placeDesertShrubs(shrubs);
-    this._createSoaringHawks(-10, 34);
+    this._createSoaringHawks(-10, 36);
   }
 
-  _buildCanyonRuins(occluders, decals) {
+  _buildCanyonRuinsAndLandmarks(occluders, decals) {
     const adobe = this.tex.loadPBRSet('adobe_wall', 1, 1);
-    const ruinMat = IS_MOBILE
-      ? new THREE.MeshLambertMaterial({ map: adobe.map, normalMap: adobe.normalMap, vertexColors: true, color: 0xf4e3c8 })
-      : new THREE.MeshStandardMaterial({
-          map: adobe.map,
-          normalMap: adobe.normalMap,
-          normalScale: new THREE.Vector2(0.55, 0.55),
-          roughness: 0.92,
-          vertexColors: true,
-          color: 0xf4e3c8,
-        });
+    const ruinMat = new THREE.MeshStandardMaterial({
+      map: adobe.map,
+      normalMap: adobe.normalMap,
+      normalScale: new THREE.Vector2(0.55, 0.55),
+      roughness: 0.92,
+      vertexColors: true,
+      color: 0xf4e3c8,
+    });
     ruinMat.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
         `#include <color_fragment>
          float _rl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-         diffuseColor.rgb = mix(vec3(_rl), diffuseColor.rgb, 0.55) * 1.45 + vec3(0.04, 0.03, 0.02);`
+         diffuseColor.rgb = mix(vec3(_rl), diffuseColor.rgb, 0.55) * 1.42 + vec3(0.035, 0.025, 0.015);`
       );
     };
-    attachDesertGrading(ruinMat, { saturation: 0.82, contrast: 1.02 });
+    attachDesertGrading(ruinMat, { saturation: 0.84, contrast: 1.02 });
 
     const wood = this.tex.loadPBRSet('desert_wood', 1, 1);
-    const woodMat = new THREE.MeshLambertMaterial({ map: wood.map, color: 0xbba282 });
+    const woodMat = new THREE.MeshLambertMaterial({ map: wood.map, color: 0xd8be9a, emissive: 0x22160a, emissiveIntensity: 0.45 });
+    const rock = this.tex.loadPBRSet('sandstone_rock', 2, 2);
+    const stoneMat = new THREE.MeshLambertMaterial({ map: rock.map, color: 0xc2ab8e });
+    const paperMat = new THREE.MeshLambertMaterial({ color: 0xefe1be, side: THREE.DoubleSide });
 
     const ruinPieces = [];
     const beamPieces = [];
 
     const addRuinWall = (wx, wz, w, h, d, ry = 0) => {
       const gy = this.getHeight(wx, wz);
-      // 1.5m subterranean foundation footing guarantees ZERO floating pillars even on sloped canyon banks!
-      const foot = 1.5;
-      const totalH = h + foot;
-      const geo = createBakedArchitecturalBox(w, totalH, d, { bottomAO: 0.56, topAO: 0.98, cornerAO: 0.20, tileScale: 1.4 });
+      const foot = 1.6;
+      const geo = createBakedArchitecturalBox(w, h + foot, d, { bottomAO: 0.58, topAO: 0.98, cornerAO: 0.20, tileScale: 1.4 });
       const m = new THREE.Matrix4().compose(
         new THREE.Vector3(wx, gy + h * 0.5 - foot * 0.5, wz),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)),
@@ -1099,7 +1279,7 @@ export class StageManager {
       decals.push({ x: wx, z: wz, sx: w * 1.35, sz: d * 1.45, ry });
     };
 
-    const addArchway = (wx, wz, span = 4.6, height = 3.8, ry = 0) => {
+    const addArchway = (wx, wz, span = 5.4, height = 4.1, ry = 0) => {
       const cos = Math.cos(ry);
       const sin = Math.sin(ry);
       const half = span * 0.5;
@@ -1109,34 +1289,79 @@ export class StageManager {
       const rz = wz - half * sin;
       const baseTop = Math.max(this.getHeight(lx, lz), this.getHeight(rx, rz)) + height;
       addRuinWall(lx, lz, 0.95, Math.max(2.2, baseTop - this.getHeight(lx, lz)), 0.95, ry);
-      addRuinWall(rx, rz, 0.95, Math.max(2.2, baseTop - this.getHeight(rx, rz) - 0.12), 0.95, ry);
+      addRuinWall(rx, rz, 0.95, Math.max(2.2, baseTop - this.getHeight(rx, rz) - 0.1), 0.95, ry);
       const lintel = new THREE.BoxGeometry(span + 1.3, 0.38, 0.76);
       const m = new THREE.Matrix4().compose(
         new THREE.Vector3(wx, baseTop - 0.22, wz),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, -0.03)),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, -0.02)),
         new THREE.Vector3(1, 1, 1)
       );
       lintel.applyMatrix4(m);
       beamPieces.push(lintel);
     };
 
-    // Ruin Site 1: Ancient Caravanserai Gate & Crumbling Walls squarely on canyon floor at z ≈ +42
+    // Ruin Site 1: Caravanserai Courtyard squarely on flat rocky plaza (z = +42)
     const r1x = getCanyonCenterX(42);
-    addArchway(r1x, 42, 5.4, 4.1, 0.10);
-    addRuinWall(r1x - 7.4, 39.0, 5.6, 2.5, 0.68, 0.22);
-    addRuinWall(r1x + 7.2, 44.0, 5.2, 2.2, 0.66, -0.28);
-    addRuinWall(r1x - 8.6, 46.2, 0.76, 1.5, 4.2, 0.12);
+    addArchway(r1x, 42, 5.6, 4.1, 0.08);
+    addRuinWall(r1x - 7.8, 39.2, 5.8, 2.5, 0.68, 0.20);
+    addRuinWall(r1x + 7.6, 43.8, 5.2, 2.2, 0.66, -0.24);
+    addRuinWall(r1x - 9.2, 46.2, 0.76, 1.5, 4.2, 0.10);
 
-    // Ruin Site 2: Broken Watchpost & Colonnade at z ≈ -64
+    // Interactive Note on weathered crate inside Ruins 1!
+    const noteX = r1x - 5.2;
+    const noteZ = 40.8;
+    const noteY = this.getHeight(noteX, noteZ);
+    const noteSheet = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.32), paperMat);
+    noteSheet.rotation.x = -Math.PI / 2;
+    noteSheet.position.set(noteX, noteY + 0.56, noteZ);
+    this.stageGroup.add(noteSheet);
+    this.stageInteractables.push({
+      id: 'ruin_note',
+      label: 'قراءة مذكرة سالم في الخان',
+      worldPos: new THREE.Vector3(noteX, noteY + 0.8, noteZ),
+      radius: 4.4,
+    });
+
+    // LANDMARK 2.2: Ancient Oasis Stone Well + Extinguished Brass Caravan Lantern (z = -14)
+    const wellX = getCanyonCenterX(-14) - 4.5;
+    const wellZ = -14;
+    const wellY = this.getHeight(wellX, wellZ);
+    const wellGroup = new THREE.Group();
+    wellGroup.position.set(wellX, wellY, wellZ);
+    const wellRing = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.48, 1.15, 12, 1, true), stoneMat);
+    wellRing.position.y = 0.52;
+    const wellRim = new THREE.Mesh(new THREE.TorusGeometry(1.38, 0.14, 6, 16), stoneMat);
+    wellRim.rotation.x = Math.PI / 2;
+    wellRim.position.y = 1.06;
+    const wellWater = new THREE.Mesh(new THREE.CircleGeometry(1.25, 12), new THREE.MeshBasicMaterial({ color: 0x162426 }));
+    wellWater.rotation.x = -Math.PI / 2;
+    wellWater.position.y = 0.35;
+    const lanternProp = this.models.createMesh('lantern', 0.17);
+    if (lanternProp) {
+      lanternProp.position.set(1.18, 1.12, 0.65);
+      wellGroup.add(lanternProp);
+    }
+    wellGroup.add(wellRing, wellRim, wellWater);
+    this.stageGroup.add(wellGroup);
+    this.physics.addCylinderCollider(wellX, wellZ, 1.55, wellY + 1.5, false);
+    occluders.push({ type: 'circle', x: wellX, z: wellZ, r: 1.6, pad: 2.2, strength: 0.36 });
+    decals.push({ x: wellX, z: wellZ, sx: 4.2, sz: 4.2, ry: 0 });
+
+    this.stageInteractables.push({
+      id: 'oasis_well',
+      label: 'فحص بئر الواحة والفانوس',
+      worldPos: new THREE.Vector3(wellX + 1.1, wellY + 1.25, wellZ + 0.6),
+      radius: 4.5,
+    });
+
+    // Ruin Site 2 & Mountain Ascent Gate
     const r2x = getCanyonCenterX(-64);
-    addArchway(r2x + 0.8, -64, 5.0, 3.9, -0.15);
-    addRuinWall(r2x + 7.4, -60.5, 5.4, 2.7, 0.68, -0.20);
-    addRuinWall(r2x - 7.2, -67.0, 4.8, 2.1, 0.66, 0.28);
-    addRuinWall(r2x + 6.4, -70.0, 1.0, 3.2, 1.0, 0.1);
+    addArchway(r2x + 0.5, -64, 5.2, 3.9, -0.14);
+    addRuinWall(r2x + 7.6, -60.5, 5.4, 2.7, 0.68, -0.18);
+    addRuinWall(r2x - 7.4, -67.0, 4.8, 2.1, 0.66, 0.25);
 
-    // Ruin Site 3: Mountain Ascent Pass Stone Gate at z ≈ -116
-    const r3x = getCanyonCenterX(-116);
-    addArchway(r3x, -116, 5.8, 4.4, 0.05);
+    const r3x = getCanyonCenterX(-114);
+    addArchway(r3x, -114, 5.8, 4.4, 0.04);
 
     if (ruinPieces.length) {
       const mesh = new THREE.Mesh(mergeGeometries(ruinPieces, false), ruinMat);
@@ -1144,27 +1369,29 @@ export class StageManager {
       mesh.receiveShadow = true;
       ruinPieces.forEach((g) => g.dispose());
       this.stageGroup.add(mesh);
+      this.sunOccluders.push(mesh);
     }
     if (beamPieces.length) {
       const bMesh = new THREE.Mesh(mergeGeometries(beamPieces, false), woodMat);
       bMesh.castShadow = !IS_MOBILE;
       beamPieces.forEach((g) => g.dispose());
       this.stageGroup.add(bMesh);
+      this.sunOccluders.push(bMesh);
     }
 
     const crateGeo = this.models.getGeometry('crate');
     const crateMat = this.models.getMaterial('crate');
     if (crateGeo && crateMat) {
       const cPos = [
-        [r1x - 5.2, 40.8, 0.4, 1.25],
-        [r1x + 5.0, 43.2, 1.1, 1.1],
+        [r1x - 5.2, 40.8, 0.3, 1.28],
+        [r1x + 5.2, 43.2, 1.1, 1.1],
         [r2x + 5.4, -62.0, -0.3, 1.3],
       ];
       const inst = new THREE.InstancedMesh(crateGeo, crateMat, cPos.length);
       cPos.forEach(([x, z, ry, sc], i) => {
         const y = this.getHeight(x, z);
-        this._dummy.position.set(x, y - 0.06, z);
-        this._dummy.rotation.set(0.08, ry, -0.06);
+        this._dummy.position.set(x, y - 0.05, z);
+        this._dummy.rotation.set(0.05, ry, -0.04);
         this._dummy.scale.setScalar(sc);
         this._dummy.updateMatrix();
         inst.setMatrixAt(i, this._dummy.matrix);
@@ -1184,8 +1411,8 @@ export class StageManager {
       const inst = new THREE.InstancedMesh(barrelGeo, barrelMat, bPos.length);
       bPos.forEach(([x, z, sc], i) => {
         const y = this.getHeight(x, z);
-        this._dummy.position.set(x, y - 0.08, z);
-        this._dummy.rotation.set(0.12, i * 1.4, 0);
+        this._dummy.position.set(x, y - 0.06, z);
+        this._dummy.rotation.set(0.08, i * 1.4, 0);
         this._dummy.scale.setScalar(sc);
         this._dummy.updateMatrix();
         inst.setMatrixAt(i, this._dummy.matrix);
@@ -1197,66 +1424,115 @@ export class StageManager {
   }
 
   // ============================================================================
-  // STAGE 3 (SUNSET/DUSK): High Mountain Peak (92m) Overlooking Sea of Dunes + Distant House Glimmer!
+  // STAGE 3 (SUNSET/DUSK): High Mountain Peak + Mid-Ridge Shelter + Summit Spyglass Overlooking Seamless Dune Sea!
   // ============================================================================
   _buildStage3Summit(occluders, decals) {
-    const cairns = [];
-    for (let z = 92; z >= -84; z -= 26) {
-      const rx = getRidgeCenterX(z);
-      cairns.push({ x: rx + (z % 52 === 0 ? 3.2 : -3.2), z, scale: 1.12, ry: z * 0.2 });
-    }
-    // Iconic Tall Summit Overlook Cairn framing the left edge of the sheer cliff rim!
-    const sumX = getRidgeCenterX(-99);
-    cairns.push({ x: sumX - 5.2, z: -99.5, scale: 1.38, ry: 0.7 });
-    this._placeStoneCairns(cairns, occluders, decals);
+    const wood = this.tex.loadPBRSet('desert_wood', 1, 1);
+    const woodMat = new THREE.MeshLambertMaterial({ map: wood.map, color: 0xb69c7e });
+    const adobe = this.tex.loadPBRSet('adobe_wall', 1, 1);
+    const shelterMat = new THREE.MeshStandardMaterial({
+      map: adobe.map,
+      normalMap: adobe.normalMap,
+      roughness: 0.92,
+      vertexColors: true,
+      color: 0xe2ceb2,
+    });
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd4a64a, roughness: 0.34, metalness: 0.82 });
+    const paperMat = new THREE.MeshLambertMaterial({ color: 0xefe1be, side: THREE.DoubleSide });
 
-    const rocks = [];
-    let seed = 3391;
+    // --- LANDMARK 3.1: Mid-Ridge Stone Watch Shelter (z = +20) with Salem's Star Map! ---
+    const shX = getRidgeCenterX(20) - 4.8;
+    const shZ = 20;
+    const shY = this.getHeight(shX, shZ);
+    const shGroup = new THREE.Group();
+    shGroup.position.set(shX, shY, shZ);
+    shGroup.rotation.y = 0.25;
+    const backW = new THREE.Mesh(createBakedArchitecturalBox(3.6, 2.8, 0.55), shelterMat);
+    backW.position.set(0, 1.0, -1.4);
+    const sideW = new THREE.Mesh(createBakedArchitecturalBox(0.55, 2.4, 2.8), shelterMat);
+    sideW.position.set(-1.6, 0.8, 0);
+    const shCrate = this.models.createMesh('crate', 1.22);
+    if (shCrate) {
+      shCrate.position.set(0.3, 0, -0.5);
+      shGroup.add(shCrate);
+    }
+    const starMap = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.34), paperMat);
+    starMap.rotation.x = -Math.PI / 2;
+    starMap.position.set(0.3, 0.55, -0.5);
+    shGroup.add(backW, sideW, starMap);
+    this.stageGroup.add(shGroup);
+    this.sunOccluders.push(shGroup);
+    this.physics.addBoxCollider(shX - 2.0, shX + 1.8, shZ - 1.8, shZ + 1.2, shY - 1, shY + 2.8, false);
+    occluders.push({ type: 'box', x: shX, z: shZ, hx: 2.0, hz: 1.6, pad: 2.4, strength: 0.38 });
+
+    this.stageInteractables.push({
+      id: 'ridge_shelter',
+      label: 'قراءة خريطة النجوم في المأوى',
+      worldPos: new THREE.Vector3(shX + 0.3, shY + 0.8, shZ - 0.4),
+      radius: 4.5,
+    });
+
+    // --- LANDMARK 3.2: Summit Overlook Brass Spyglass Tripod (z = -96) aimed at the distant Abandoned House! ---
+    const sumX = getRidgeCenterX(-96);
+    const sumZ = -96;
+    const sumY = this.getHeight(sumX, sumZ);
+    const spyGroup = new THREE.Group();
+    spyGroup.position.set(sumX - 2.2, sumY, sumZ);
+    // 3 wooden tripod legs
+    [0, 2.1, 4.2].forEach((ang) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.55, 5), woodMat);
+      leg.position.set(Math.cos(ang) * 0.32, 0.72, Math.sin(ang) * 0.32);
+      leg.rotation.z = Math.cos(ang) * 0.34;
+      leg.rotation.x = -Math.sin(ang) * 0.34;
+      spyGroup.add(leg);
+    });
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.08, 0.85, 10), brassMat);
+    tube.rotation.x = Math.PI / 2 + 0.25;
+    tube.rotation.z = -0.15;
+    tube.position.set(0, 1.48, -0.05);
+    spyGroup.add(tube);
+    this.stageGroup.add(spyGroup);
+    this.physics.addCylinderCollider(sumX - 2.2, sumZ, 0.55, sumY + 1.6, false);
+
+    this.stageInteractables.push({
+      id: 'summit_spyglass',
+      label: 'النظر عبر المنظار نحو الضوء البعيد',
+      worldPos: new THREE.Vector3(sumX - 2.2, sumY + 1.45, sumZ),
+      radius: 4.8,
+    });
+
+    // Watertight Sculpted Mountain Ridge Boulders flanking the trail (ZERO floating flat far-mesas!)
+    const boulders = [];
+    let seed = 3407;
     const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-    for (let z = 104; z >= -96; z -= 11) {
+    for (let z = 98; z >= -86; z -= 13) {
       const rx = getRidgeCenterX(z);
       const hw = getRidgeHalfWidth(z);
       for (const side of [-1, 1]) {
-        if (z < -88 && side === 1) continue;
-        const off = (hw * 0.72 + rand() * 3.0) * side;
-        const s = 2.4 + rand() * 3.4;
-        rocks.push({
+        if (Math.abs(z - 20) < 12 && side === -1) continue; // Keep mid-ridge shelter clear!
+        const off = (hw * 0.72 + rand() * 2.4) * side;
+        const s = 1.5 + rand() * 2.1;
+        boulders.push({
           x: rx + off,
           z: z + (rand() - 0.5) * 4.0,
-          sx: s * 1.15,
-          sy: s * 0.68,
-          sz: s * 0.9,
+          sx: s * 1.18,
+          sy: s * 0.70,
+          sz: s * 0.94,
           ry: rand() * 6.28,
           type: Math.floor(rand() * 2),
         });
       }
     }
-    this._placeScannedRocks(rocks, occluders, decals);
+    this._placeSolidBoulders(boulders, occluders, decals, 3);
 
-    // Distant flanking mesas far below in the twilight sea of dunes
-    const farMesas = [
-      { x: -155, z: -220, y: 8, sx: 46, sy: 34, sz: 38, ry: 0.6 },
-      { x: 162, z: -205, y: 8, sx: 50, sy: 36, sz: 40, ry: 2.1 },
-      { x: -145, z: 25, y: 6, sx: 42, sy: 28, sz: 34, ry: 1.3 },
-      { x: 155, z: 40, y: 6, sx: 44, sy: 30, sz: 36, ry: 2.8 },
-    ];
-    this._placeStratifiedMesas(farMesas, [], 3, false);
-
-    // DISTANT ABANDONED HOUSE SILHOUETTE + WARM FLICKERING GLIMMER OF LIGHT grounded in the Dune Sea!
-    // At z=-310 (inside the sculpted horizon dune sea), compute exact horizon skirt dune height so it sits 100% planted!
-    const distHouseX = sumX + 26;
-    const distHouseZ = -310;
-    const d1H = Math.sin(distHouseX * 0.022 + distHouseZ * 0.017 + Math.sin(distHouseZ * 0.01) * 1.4);
-    const skirtDuneY =
-      Math.pow(1.0 - Math.abs(d1H), 1.15) * 9.5 +
-      Math.sin(distHouseX * 0.009 - distHouseZ * 0.008) * 6.5 +
-      Math.cos(distHouseX * 0.014 + distHouseZ * 0.012) * 4.5 +
-      5.0;
+    // DISTANT ABANDONED HOUSE SILHOUETTE + WARM FLICKERING GLIMMER OF LIGHT grounded in the Seamless Dune Sea!
+    const distHouseX = sumX + 24;
+    const distHouseZ = -305;
+    const skirtDuneY = getStage3DuneSeaHeight(distHouseX, distHouseZ);
 
     const distantHouseGroup = new THREE.Group();
     distantHouseGroup.position.set(distHouseX, skirtDuneY - 0.8, distHouseZ);
     const darkAdobeMat = new THREE.MeshLambertMaterial({ color: 0x52392d });
-    // Deep foundation plinth extending 8m below dune crest so zero gap ever shows from any angle!
     const foundation = new THREE.Mesh(new THREE.BoxGeometry(17.5, 9.0, 14.5), darkAdobeMat);
     foundation.position.y = -4.2;
     const mainBlock = new THREE.Mesh(new THREE.BoxGeometry(15.5, 4.8, 12.2), darkAdobeMat);
@@ -1267,7 +1543,6 @@ export class StageManager {
     yardWall.position.set(0, 1.1, 9.8);
     distantHouseGroup.add(foundation, mainBlock, watchBlock, yardWall);
 
-    // Warm golden glimmering lantern beacon clearly visible down in the sea of dunes!
     const glowTex = this._createGlowSpriteTexture();
     const spriteMat = new THREE.SpriteMaterial({
       map: glowTex,
@@ -1294,21 +1569,10 @@ export class StageManager {
   }
 
   // ============================================================================
-  // STAGE 4 (NIGHT): Moonlit Approach + Full Explorable Abandoned House Under the Stars
+  // STAGE 4 (NIGHT): Moonlit Desert + 3D Spatial Crickets + Abandoned House Sanctuary!
   // ============================================================================
   _buildStage4Night(occluders, decals) {
-    // 1. Guiding Moonlit Stone Cairns leading from spawn (-4, 122) to the Abandoned House at (0, -68)
-    const cairns = [
-      { x: -1.5, z: 102, scale: 1.08, ry: 0.4 },
-      { x: 4.5, z: 74, scale: 1.12, ry: 1.5 },
-      { x: -3.2, z: 44, scale: 1.15, ry: 2.2 },
-      { x: 3.8, z: 14, scale: 1.08, ry: 0.9 },
-      { x: -2.4, z: -16, scale: 1.16, ry: 1.8 },
-      { x: 2.2, z: -42, scale: 1.10, ry: 2.9 },
-    ];
-    this._placeStoneCairns(cairns, occluders, decals);
-
-    // 2. Full Abandoned Desert Estate at (0, 0, -68) — Cleaned of Jug/Vase & Jeep, Baked Corner AO + Warm Night Lanterns!
+    // 1. Full Explorable Abandoned House at (0, 0, -68)
     this.abandonedHouse = new AbandonedHouse(
       this.stageGroup,
       this.tex,
@@ -1319,6 +1583,10 @@ export class StageManager {
       STAGE4_HOUSE_Z,
       STAGE4_HOUSE_BASE_Y
     );
+    this.sunOccluders.push(this.abandonedHouse.group);
+    this.stageInteractables.push(...this.abandonedHouse.getInteractables());
+    this.spatialAudioSpots.push(...this.abandonedHouse.lanternWorldPositions);
+
     occluders.push({
       type: 'box',
       x: STAGE4_HOUSE_X,
@@ -1326,42 +1594,52 @@ export class StageManager {
       hx: 8.4,
       hz: 7.2,
       pad: 3.8,
-      strength: 0.44,
+      strength: 0.40,
     });
 
-    // 3. Moonlit Oasis Palms around the Abandoned House & approach dunes
+    // 2. Realistic Moonlit Arabian Date Palms around the House & dunes
     const palms = [
-      { x: STAGE4_HOUSE_X - 11.2, z: STAGE4_HOUSE_Z - 9.0, h: 6.4, lean: 0.14, ry: 0.4 },
-      { x: STAGE4_HOUSE_X - 13.0, z: STAGE4_HOUSE_Z - 6.2, h: 5.0, lean: -0.18, ry: 2.1 },
-      { x: STAGE4_HOUSE_X + 11.8, z: STAGE4_HOUSE_Z - 10.2, h: 5.8, lean: 0.16, ry: 1.2 },
-      { x: -15.5, z: 32.0, h: 5.2, lean: 0.18, ry: 2.8 },
-      { x: 16.5, z: -18.0, h: 5.6, lean: -0.15, ry: 0.9 },
+      { x: STAGE4_HOUSE_X - 11.4, z: STAGE4_HOUSE_Z - 9.0, h: 6.8, lean: 0.14, ry: 0.4 },
+      { x: STAGE4_HOUSE_X - 13.4, z: STAGE4_HOUSE_Z - 6.0, h: 5.4, lean: -0.16, ry: 2.1 },
+      { x: STAGE4_HOUSE_X + 12.0, z: STAGE4_HOUSE_Z - 10.2, h: 6.2, lean: 0.15, ry: 1.2 },
+      { x: -16.5, z: 28.0, h: 5.8, lean: 0.16, ry: 2.8 },
+      { x: 17.5, z: -18.0, h: 6.2, lean: -0.14, ry: 0.9 },
     ];
     this._placeDesertPalms(palms, occluders, decals);
 
-    // 4. Moonlit Boulders & Distant Silhouetted Mesas
-    const rocks = [
-      { x: -12.0, z: 96, sx: 4.8, sy: 2.4, sz: 3.4, ry: 0.7, type: 0 },
-      { x: 14.5, z: 62, sx: 5.6, sy: 2.8, sz: 4.0, ry: 2.2, type: 1 },
-      { x: -16.5, z: 24, sx: 6.2, sy: 3.2, sz: 4.2, ry: 1.1, type: 0 },
-      { x: 15.2, z: -6, sx: 5.2, sy: 2.6, sz: 3.8, ry: 0.4, type: 1 },
-      { x: -14.2, z: -56, sx: 5.8, sy: 3.0, sz: 3.9, ry: 1.5, type: 0 },
-      { x: 14.6, z: -58, sx: 5.6, sy: 2.9, sz: 3.8, ry: 2.5, type: 1 },
+    // 3. Watertight Moonlit Desert Boulders + 3D Spatial Night Cricket Patches!
+    const boulders = [
+      { x: -12.5, z: 88, sx: 2.4, sy: 1.5, sz: 1.9, ry: 0.7, type: 0 },
+      { x: 14.5, z: 54, sx: 2.8, sy: 1.7, sz: 2.1, ry: 2.2, type: 1 },
+      { x: -16.5, z: 18, sx: 3.1, sy: 1.9, sz: 2.3, ry: 1.1, type: 0 },
+      { x: 23.5, z: -8, sx: 2.7, sy: 1.6, sz: 2.0, ry: 0.4, type: 1 },
+      { x: -14.8, z: -56, sx: 2.9, sy: 1.8, sz: 2.2, ry: 1.5, type: 0 },
+      { x: 14.6, z: -58, sx: 2.8, sy: 1.7, sz: 2.1, ry: 2.5, type: 1 },
     ];
-    this._placeScannedRocks(rocks, occluders, decals);
+    this._placeSolidBoulders(boulders, occluders, decals, 4);
+
+    // Anchor 3D spatialized night cricket patches in the desert rocks & bushes around the approach & yard!
+    const cricketSpots = [
+      { x: -18, z: 75 },
+      { x: 20, z: 42 },
+      { x: -22, z: 8 },
+      { x: 19, z: -26 },
+      { x: -16, z: -52 },
+      { x: 18, z: -56 },
+    ];
+    cricketSpots.forEach((c) => {
+      this.spatialAudioSpots.push({ type: 'cricket', x: c.x, y: this.getHeight(c.x, c.z), z: c.z });
+    });
 
     const mesas = [
-      { x: -132, z: -118, sx: 44, sy: 26, sz: 34, ry: 0.5 },
-      { x: 118, z: -126, sx: 48, sy: 28, sz: 36, ry: 1.8 },
-      { x: -126, z: 42, sx: 42, sy: 24, sz: 32, ry: 2.3 },
-      { x: 128, z: 54, sx: 44, sy: 24, sz: 34, ry: 0.9 },
+      { x: -132, z: -118, sx: 44, sy: 28, sz: 34, ry: 0.5 },
+      { x: 118, z: -126, sx: 48, sy: 30, sz: 36, ry: 1.8 },
+      { x: -126, z: 42, sx: 42, sy: 25, sz: 32, ry: 2.3 },
+      { x: 128, z: 54, sx: 44, sy: 25, sz: 34, ry: 0.9 },
     ];
     this._placeStratifiedMesas(mesas, occluders, 4, true);
   }
 
-  // ============================================================================
-  // GPU AMBIENT DUST PARTICLES
-  // ============================================================================
   _createGPUDustParticles(stageId) {
     const atmos = STAGE_ATMOSPHERES[stageId];
     const maxCount = this._dustMaxCount;
@@ -1370,11 +1648,11 @@ export class StageManager {
     const seeds = new Float32Array(maxCount * 3);
 
     for (let i = 0; i < maxCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 52;
-      positions[i * 3 + 1] = 0.25 + Math.random() * 4.0;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 52;
+      positions[i * 3] = (Math.random() - 0.5) * 44;
+      positions[i * 3 + 1] = 0.25 + Math.random() * 3.4;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 44;
       seeds[i * 3] = Math.random() * 6.28;
-      seeds[i * 3 + 1] = 0.7 + Math.random() * 1.25;
+      seeds[i * 3 + 1] = 0.65 + Math.random() * 1.1;
       seeds[i * 3 + 2] = Math.random();
     }
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -1400,13 +1678,12 @@ export class StageManager {
         uniform vec3 uPlayerPos;
         void main() {
           vec3 p = position;
-          float speed = (2.1 + uStorm * 8.5) * aSeed.y;
-          p.x = mod(p.x + uTime * speed - uPlayerPos.x + 26.0, 52.0) - 26.0 + uPlayerPos.x;
-          p.z = mod(p.z + uTime * speed * 0.42 - uPlayerPos.z + 26.0, 52.0) - 26.0 + uPlayerPos.z;
-          p.y = uPlayerPos.y - 0.4 + position.y + sin(uTime * (1.2 + uStorm * 2.0) + aSeed.x) * (0.22 + uStorm * 0.35);
+          float speed = (1.6 + uStorm * 4.5) * aSeed.y;
+          p.x = mod(p.x + uTime * speed - uPlayerPos.x + 22.0, 44.0) - 22.0 + uPlayerPos.x;
+          p.z = mod(p.z + uTime * speed * 0.38 - uPlayerPos.z + 22.0, 44.0) - 22.0 + uPlayerPos.z;
+          p.y = uPlayerPos.y - 0.3 + position.y + sin(uTime * 1.1 + aSeed.x) * 0.22;
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          float sizeMult = 1.0 + uStorm * 0.65;
-          gl_PointSize = clamp((102.0 * sizeMult) / max(1.0, -mvPosition.z), 2.0, 14.0);
+          gl_PointSize = clamp(82.0 / max(1.0, -mvPosition.z), 1.5, 11.0);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1418,7 +1695,7 @@ export class StageManager {
         void main() {
           vec4 tex = texture2D(uMap, gl_PointCoord);
           if (tex.a < 0.05) discard;
-          float op = mix(uBaseOpacity, 0.54, uStorm);
+          float op = mix(uBaseOpacity, 0.36, uStorm);
           gl_FragColor = vec4(uColor * tex.rgb, tex.a * op);
         }
       `,
@@ -1446,14 +1723,11 @@ export class StageManager {
     }
   }
 
-  getActiveInteractable() {
-    if (this.currentStageId === 4 && this.abandonedHouse) {
-      return this.abandonedHouse.getSanctuaryInteractable();
-    }
-    return null;
+  getInteractableById(id) {
+    return this.stageInteractables.find((it) => it.id === id) || null;
   }
 
-  update(dt, elapsed, playerPos, camera) {
+  update(dt, elapsed, playerPos, camera, activeTargetPos = null) {
     this.palmTimeUniform.value = elapsed;
 
     if (this.dustUniforms && playerPos) {
@@ -1465,26 +1739,29 @@ export class StageManager {
       this.abandonedHouse.update(dt, elapsed, playerPos);
     }
 
-    // Subtle flicker on Stage 3 distant house lantern glimmer!
     if (this.beaconSprite && this.currentStageId === 3) {
       const flick = 0.88 + 0.14 * Math.sin(elapsed * 4.8) + 0.08 * Math.cos(elapsed * 11.3);
       this.beaconSprite.scale.set(16.0 * flick, 16.0 * flick, 1);
     }
 
-    // Gentle floating goal ring facing camera (fades out cleanly within 14m so vistas stay pure!)
-    if (this.goalRingMesh && camera) {
-      const d = camera.position.distanceTo(this.goalRingMesh.position);
-      if (d < 14.0) {
-        this.goalRingMesh.visible = false;
+    // Floating diamond objective marker (visible from medium/far distance, smoothly hides within 5.5m!)
+    if (this.waypointMarker && camera) {
+      if (activeTargetPos) {
+        this.waypointMarker.position.set(activeTargetPos.x, activeTargetPos.y + 0.85, activeTargetPos.z);
+        const d = camera.position.distanceTo(this.waypointMarker.position);
+        if (d < 5.5) {
+          this.waypointMarker.visible = false;
+        } else {
+          this.waypointMarker.visible = true;
+          this.waypointMarker.lookAt(camera.position);
+          const sc = THREE.MathUtils.clamp(0.75 + d * 0.012, 0.8, 2.4);
+          this.waypointMarker.scale.setScalar(sc * (0.92 + Math.sin(elapsed * 3.4) * 0.1));
+        }
       } else {
-        this.goalRingMesh.visible = true;
-        this.goalRingMesh.lookAt(camera.position);
-        const pulse = 0.92 + Math.sin(elapsed * 2.8) * 0.12;
-        this.goalRingMesh.scale.setScalar(pulse);
+        this.waypointMarker.visible = false;
       }
     }
 
-    // Throttled 30Hz hawk updates
     if (this.hawkInst && this.hawks.length > 0) {
       this._faunaAccum += dt;
       if (this._faunaAccum >= 0.033) {

@@ -9,7 +9,10 @@ const SKY_VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-// Shared core procedural atmosphere (Noon -> Afternoon -> Sunset/Dusk -> Starry Milky Way & Crescent Moon Night!)
+// Photorealistic Physical-Style Arabian Desert Atmosphere (v6.0):
+// - Smooth multi-layer Rayleigh/Mie scattering + realistic horizon dust belt
+// - Soft backlit volumetric cumulus & wispy high-altitude cirrus clouds (NOT flat noise!)
+// - Ultra-crisp pinpoint magnitude-weighted starfield, fine Milky Way stardust filaments & detailed Crescent Moon!
 const SKY_CORE_FUNCTIONS = /* glsl */ `
   uniform vec3 uSunDir;
   uniform float uSkyMode; // 0=Noon, 1=Afternoon, 2=Sunset/Dusk, 3=Night
@@ -19,7 +22,7 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
   uniform vec3 uHorizonColor;
 
   float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
+    p = fract(p * vec2(127.1, 311.7));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
   }
@@ -34,21 +37,21 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
     vec2 i = floor(p);
     vec2 f = fract(p);
     vec2 u = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    return mix(
+      mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x),
+      mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x),
+      u.y
+    );
   }
 
-  float fbmClouds(vec2 p, int octaves) {
+  float fbm(vec2 p, int octaves) {
     float val = 0.0;
-    float amp = 0.52;
+    float amp = 0.5;
     mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
     for (int i = 0; i < 5; i++) {
       if (i >= octaves) break;
       val += amp * vnoise(p);
-      p = rot * p * 2.07 + vec2(1.7, 9.2);
+      p = rot * p * 2.04 + vec2(1.7, 9.2);
       amp *= 0.5;
     }
     return val;
@@ -60,81 +63,84 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
     return (1.0 - g2) / (4.0 * 3.14159265 * pow(denom, 1.5));
   }
 
-  // Analytical crisp twinkling star layer on unit sphere cube-grid
-  vec3 evalStarLayer(vec3 dir, float scale, float threshold, float brightness, float timeVal) {
+  // Ultra-fine realistic pinpoint stars (sub-pixel sharp cores, natural color temperatures!)
+  vec3 evalPinpointStars(vec3 dir, float scale, float densityThresh, float power, float timeVal) {
     vec3 p = dir * scale;
     vec3 cell = floor(p);
     vec3 f = fract(p) - 0.5;
     vec3 rnd = hash33(cell);
-    if (rnd.x < threshold) return vec3(0.0);
-    vec3 offset = (rnd - 0.5) * 0.58;
-    float d = length(f - offset);
-    float core = smoothstep(0.16, 0.015, d);
-    float twinkle = 0.72 + 0.28 * sin(timeVal * (1.8 + rnd.y * 3.8) + rnd.z * 62.8);
-    // Natural star temperatures (warm gold -> pure white -> pale blue-white)
-    vec3 starCol = mix(vec3(1.0, 0.86, 0.68), vec3(0.76, 0.88, 1.0), rnd.y);
-    return starCol * core * brightness * twinkle;
+    if (rnd.x < densityThresh) return vec3(0.0);
+    vec3 jitter = (rnd - 0.5) * 0.62;
+    float d = length(f - jitter);
+    // Razor-sharp tiny pinpoint instead of blurry giant blobs
+    float star = exp(-d * d * 190.0);
+    float mag = pow(fract(rnd.x * 37.0), 2.4);
+    float twinkle = 0.80 + 0.20 * sin(timeVal * (1.6 + rnd.y * 3.2) + rnd.z * 62.8);
+    vec3 col = mix(vec3(1.0, 0.88, 0.72), vec3(0.76, 0.88, 1.0), rnd.y);
+    return col * star * (0.25 + 0.75 * mag) * power * twinkle;
   }
 
-  // Luminous Milky Way galaxy band + dust lanes arching over the Arabian desert
+  // Realistic delicate Milky Way stardust band with dark dust rift (NOT blotchy big fog!)
   vec3 evalMilkyWay(vec3 dir, float nightWeight) {
-    if (nightWeight < 0.01 || dir.y < -0.05) return vec3(0.0);
-    // Arch diagonally right across the northern desert sky above the Abandoned House!
-    vec3 galNormal = normalize(vec3(0.76, -0.58, -0.29));
+    if (nightWeight < 0.01 || dir.y < 0.0) return vec3(0.0);
+    vec3 galNormal = normalize(vec3(0.74, -0.56, -0.37));
     vec3 galRight  = normalize(cross(vec3(0.0, 1.0, 0.0), galNormal));
     vec3 galUp     = normalize(cross(galNormal, galRight));
 
     float lat = dot(dir, galNormal);
     float lon = atan(dot(dir, galUp), dot(dir, galRight));
 
-    float band = exp(-lat * lat * 15.0);
-    float coreMask = exp(-lat * lat * 42.0) * (0.58 + 0.42 * cos(lon * 1.0 + 0.3));
+    // Wide delicate outer glow + tighter luminous stardust spine
+    float outerBand = exp(-lat * lat * 18.0);
+    float innerSpine = exp(-lat * lat * 55.0);
 
-    vec2 gUV = vec2(lon * 2.4, lat * 6.2);
-    float neb1 = fbmClouds(gUV + vec2(1.4, 3.1), 4);
-    float neb2 = fbmClouds(gUV * 2.3 - vec2(4.2, 0.8), 3);
-    float dustLane = smoothstep(0.36, 0.68, fbmClouds(gUV * 1.9 + vec2(7.3, 2.2), 3));
+    vec2 gUV = vec2(lon * 3.8, lat * 11.0);
+    float fineDust = fbm(gUV * 2.1 + vec2(2.3, 1.1), 4);
+    float riftNoise = fbm(gUV * 1.4 - vec2(5.1, 2.7), 3);
+    // Dark central Great Rift dust lane
+    float darkRift = exp(-lat * lat * 140.0) * smoothstep(0.32, 0.72, riftNoise);
 
-    float glow = band * smoothstep(0.26, 0.84, neb1) * (1.0 - dustLane * 0.52);
-    float fineCloud = coreMask * smoothstep(0.34, 0.84, neb2) * (1.0 - dustLane * 0.40);
+    // Fine unresolved star-cloud shimmer
+    float microSpec = vnoise(gUV * 12.0) * 0.5 + 0.5;
+    float cloud = outerBand * smoothstep(0.30, 0.82, fineDust) * (0.65 + 0.35 * microSpec);
+    float core = innerSpine * smoothstep(0.36, 0.86, fineDust) * (1.0 - darkRift * 0.78);
 
-    vec3 outerCol = vec3(0.14, 0.22, 0.42);
-    vec3 coreCol  = vec3(0.50, 0.44, 0.58);
-    vec3 mw = outerCol * glow * 0.85 + coreCol * fineCloud * 1.05;
+    vec3 dustBlue = vec3(0.075, 0.125, 0.24);
+    vec3 starWarm = vec3(0.26, 0.25, 0.33);
+    vec3 mw = dustBlue * cloud * 0.55 + starWarm * core * 0.72;
 
-    float horizonFade = smoothstep(0.02, 0.28, dir.y);
+    float horizonFade = smoothstep(0.03, 0.32, dir.y);
     return mw * horizonFade * nightWeight;
   }
 
-  // Razor-sharp Crescent Moon + subtle lunar halo
+  // Crisp natural Crescent Moon with subtle lunar maria shading & soft atmospheric corona
   vec3 evalCrescentMoon(vec3 dir, vec3 moonDir, float nightWeight) {
     if (nightWeight < 0.01) return vec3(0.0);
     vec3 mDir = normalize(moonDir);
     vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), mDir));
     vec3 up = normalize(cross(mDir, right));
-
     float cosA = dot(dir, mDir);
-    // Soft atmospheric lunar halo
-    float halo = pow(max(0.0, cosA), 28.0) * 0.16 + pow(max(0.0, cosA), 240.0) * 0.35;
-    vec3 res = vec3(0.45, 0.62, 0.92) * halo;
 
-    if (cosA > 0.994) {
-      // Local tangent plane coordinates around moon center
+    // Delicate atmospheric lunar corona & wide silver sky scatter
+    float halo = pow(max(0.0, cosA), 14.0) * 0.07 + pow(max(0.0, cosA), 180.0) * 0.24;
+    vec3 res = vec3(0.42, 0.58, 0.88) * halo;
+
+    if (cosA > 0.995) {
       vec3 delta = dir - mDir * cosA;
       vec2 mp = vec2(dot(delta, right), dot(delta, up));
-      float moonR = 0.0245;
+      float moonR = 0.022;
       float dMain = length(mp);
-      float outerDisc = smoothstep(moonR + 0.0014, moonR - 0.0014, dMain);
+      float outerDisc = smoothstep(moonR + 0.0011, moonR - 0.0011, dMain);
 
-      // Offset shadow sphere carves a sharp Arabian crescent (هلال)!
-      vec2 shadowOffset = vec2(0.0125, 0.0085);
+      vec2 shadowOffset = vec2(0.0112, 0.0076);
       float dShadow = length(mp - shadowOffset);
-      float shadowCut = smoothstep(moonR * 0.90 - 0.0014, moonR * 0.90 + 0.0014, dShadow);
+      float shadowCut = smoothstep(moonR * 0.91 - 0.0011, moonR * 0.91 + 0.0011, dShadow);
 
       float crescent = outerDisc * shadowCut;
-      // Subtle earthshine on dark side of moon disc
-      float earthshine = outerDisc * (1.0 - shadowCut) * 0.045;
-      vec3 moonCol = vec3(1.55, 1.50, 1.38) * crescent + vec3(0.24, 0.32, 0.48) * earthshine;
+      // Subtle lunar maria texture on the lit crescent
+      float maria = 0.86 + 0.14 * vnoise(mp * 140.0 + vec2(3.1, 1.7));
+      float earthshine = outerDisc * (1.0 - shadowCut) * 0.055;
+      vec3 moonCol = vec3(1.52, 1.48, 1.38) * crescent * maria + vec3(0.24, 0.34, 0.52) * earthshine;
       res += moonCol * smoothstep(-0.02, 0.05, dir.y);
     }
 
@@ -146,7 +152,6 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
     float y = dir.y;
     float sunCos = dot(dir, sunDir);
 
-    // Compute smooth blend weights across the 4 stages: 0=Noon, 1=Asr, 2=Sunset, 3=Night
     float m = clamp(uSkyMode, 0.0, 3.0);
     float wNoon   = max(0.0, 1.0 - m);
     float wAsr    = max(0.0, 1.0 - abs(m - 1.0));
@@ -154,68 +159,110 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
     float wNight  = max(0.0, m - 2.0);
     float dayWeight = 1.0 - wNight;
 
-    // Zenith, Mid, and Horizon Belt colors per diurnal phase (linear HDR)
+    // Physically balanced natural sky dome gradients (realistic muted Arabian desert tones!)
     vec3 zenithCol =
-      vec3(0.028, 0.135, 0.44) * wNoon +
-      vec3(0.045, 0.095, 0.24) * wAsr +
-      vec3(0.024, 0.026, 0.095) * wSunset +
-      vec3(0.004, 0.008, 0.024) * wNight;
+      vec3(0.048, 0.185, 0.48) * wNoon +
+      vec3(0.068, 0.138, 0.31) * wAsr +
+      vec3(0.036, 0.048, 0.145) * wSunset +
+      vec3(0.009, 0.016, 0.044) * wNight;
 
     vec3 midCol =
-      vec3(0.16, 0.36, 0.66) * wNoon +
-      vec3(0.29, 0.24, 0.27) * wAsr +
-      vec3(0.22, 0.095, 0.16) * wSunset +
-      vec3(0.009, 0.016, 0.042) * wNight;
+      vec3(0.22, 0.42, 0.68) * wNoon +
+      vec3(0.30, 0.29, 0.36) * wAsr +
+      vec3(0.24, 0.155, 0.23) * wSunset +
+      vec3(0.018, 0.032, 0.072) * wNight;
 
     vec3 beltCol =
-      vec3(0.68, 0.60, 0.45) * wNoon +
-      vec3(0.82, 0.39, 0.13) * wAsr +
-      vec3(0.95, 0.24, 0.06) * wSunset +
-      vec3(0.016, 0.028, 0.056) * wNight;
+      vec3(0.68, 0.63, 0.53) * wNoon +
+      vec3(0.74, 0.47, 0.26) * wAsr +
+      vec3(0.84, 0.40, 0.20) * wSunset +
+      vec3(0.034, 0.056, 0.108) * wNight;
 
-    vec3 skyCol = mix(beltCol, midCol, smoothstep(0.0, 0.28, max(y, 0.0)));
-    skyCol = mix(skyCol, zenithCol, smoothstep(0.14, 0.82, max(y, 0.0)));
+    // Smooth optical airmass curve (eliminates banding!)
+    float airmass = pow(max(0.0, y), 0.52);
+    vec3 skyCol = mix(beltCol, midCol, smoothstep(0.0, 0.44, airmass));
+    skyCol = mix(skyCol, zenithCol, smoothstep(0.28, 0.94, airmass));
 
-    // Daytime & Sunset solar scattering
+    // Natural Rayleigh/Mie solar glow
     if (dayWeight > 0.01) {
-      float azimGlow = pow(max(0.0, sunCos), mix(3.2, 2.2, wSunset)) * smoothstep(0.58, -0.05, y);
-      vec3 warmTint =
-        vec3(0.96, 0.74, 0.40) * wNoon +
-        vec3(1.12, 0.42, 0.08) * wAsr +
-        vec3(1.38, 0.28, 0.04) * wSunset;
-      float azimStrength = 0.12 * wNoon + 0.58 * wAsr + 0.95 * wSunset;
-      skyCol += warmTint * azimGlow * azimStrength * (1.0 - uStorm * 0.75) * dayWeight;
+      float azimGlow = pow(max(0.0, sunCos), mix(3.4, 2.4, wSunset)) * smoothstep(0.62, -0.04, y);
+      vec3 glowTint =
+        vec3(0.95, 0.80, 0.55) * wNoon +
+        vec3(1.02, 0.56, 0.24) * wAsr +
+        vec3(1.14, 0.46, 0.18) * wSunset;
+      float glowStr = 0.10 * wNoon + 0.44 * wAsr + 0.72 * wSunset;
+      skyCol += glowTint * azimGlow * glowStr * (1.0 - uStorm * 0.65) * dayWeight;
 
-      float mieTight = hgPhase(sunCos, 0.84);
-      float mieWide  = hgPhase(sunCos, 0.40);
+      float mieTight = hgPhase(sunCos, 0.86);
+      float mieWide  = hgPhase(sunCos, 0.44);
       vec3 sunCol =
-        vec3(1.0, 0.92, 0.76) * wNoon +
-        vec3(1.05, 0.48, 0.14) * wAsr +
-        vec3(1.22, 0.32, 0.06) * wSunset;
-      float mieScale = (1.0 - uStorm * 0.80) * smoothstep(-0.08, 0.05, y) * dayWeight;
-      skyCol += sunCol * (mieTight * 0.20 + mieWide * 0.34) * mieScale;
+        vec3(1.0, 0.94, 0.82) * wNoon +
+        vec3(1.05, 0.64, 0.30) * wAsr +
+        vec3(1.16, 0.48, 0.18) * wSunset;
+      float mieScale = (1.0 - uStorm * 0.75) * smoothstep(-0.05, 0.04, y) * dayWeight;
+      skyCol += sunCol * (mieTight * 0.16 + mieWide * 0.28) * mieScale;
 
       if (includeCelestial) {
-        float sunRadius = mix(0.99962, 0.99920, wSunset);
-        float disc = smoothstep(sunRadius - 0.00022, sunRadius + 0.00014, sunCos);
+        float sunRadius = mix(0.99966, 0.99932, wSunset);
+        float disc = smoothstep(sunRadius - 0.00018, sunRadius + 0.00012, sunCos);
         float limb = pow(clamp((sunCos - sunRadius) / (1.0 - sunRadius + 0.0001), 0.0, 1.0), 0.45);
-        vec3 discCol = mix(vec3(1.0, 0.96, 0.86), vec3(1.25, 0.42, 0.09), clamp(wAsr * 0.65 + wSunset, 0.0, 1.0)) * (2.6 + limb * 3.4);
-        float sunVis = (1.0 - smoothstep(0.15, 0.82, uStorm)) * smoothstep(-0.02, 0.015, y) * dayWeight;
+        vec3 discCol = mix(vec3(1.0, 0.97, 0.88), vec3(1.22, 0.62, 0.26), clamp(wAsr * 0.45 + wSunset, 0.0, 1.0)) * (2.5 + limb * 3.0);
+        float sunVis = (1.0 - smoothstep(0.18, 0.85, uStorm)) * smoothstep(-0.015, 0.015, y) * dayWeight;
         skyCol += discCol * disc * sunVis;
       }
     }
 
-    // Starry Night + Milky Way + Crescent Moon (also faint twilight stars in Sunset Stage 3!)
-    float starVis = clamp(wNight + wSunset * 0.22 * smoothstep(0.28, 0.72, y), 0.0, 1.0);
-    if (starVis > 0.01 && y > 0.01) {
+    // Photorealistic Multi-Layer Backlit Desert Clouds (Cumulus puffs + wispy Cirrus!)
+    int oct = int(uCloudOctaves + 0.5);
+    if (y > 0.025 && oct >= 1 && wNight < 0.92) {
+      // Curvature-corrected sky dome projection
+      vec2 cloudUV = dir.xz / (y + 0.16);
+      vec2 drift = vec2(uTime * 0.0038, uTime * 0.0014);
+
+      // High wispy cirrus layer
+      vec2 warp = vec2(vnoise(cloudUV * 0.48 + drift), vnoise(cloudUV * 0.48 + vec2(3.7, 6.2) - drift * 0.6));
+      float cirrus = fbm(cloudUV * vec2(0.45, 0.95) + warp * 0.65 + drift, oct);
+      float cirrusMask = smoothstep(0.56, 0.84, cirrus) * 0.36;
+
+      // Soft scattered desert cumulus clouds with sunlit directional self-shadowing!
+      vec2 cumUV = cloudUV * 0.58 - drift * 1.15 + warp * 0.32;
+      float cumBase = fbm(cumUV, oct);
+      float cumDensity = smoothstep(0.54, 0.80, cumBase);
+
+      // Sample cloud slightly toward sun direction for authentic 3D cloud thickness & sunlit rim!
+      vec2 sunStep = sunDir.xz * 0.075;
+      float cumTowardsSun = fbm(cumUV + sunStep, max(2, oct - 1));
+      float lightTrans = clamp(1.0 - (cumTowardsSun - cumBase) * 3.8, 0.18, 1.0);
+
+      float horizonFade = smoothstep(0.035, 0.24, y) * smoothstep(2.6, 0.45, length(cloudUV) * 0.35);
+      float totalCloud = clamp((cirrusMask + cumDensity * 0.72) * horizonFade * (1.0 - uStorm * 0.7) * dayWeight, 0.0, 0.84);
+
+      float silverLining = pow(max(0.0, sunCos), 7.0) * (1.0 - cumDensity * 0.45);
+      vec3 litCol =
+        vec3(0.96, 0.95, 0.92) * wNoon +
+        vec3(1.02, 0.72, 0.44) * wAsr +
+        vec3(1.12, 0.56, 0.32) * wSunset;
+      vec3 shdCol =
+        vec3(0.48, 0.56, 0.68) * wNoon +
+        vec3(0.36, 0.30, 0.34) * wAsr +
+        vec3(0.18, 0.14, 0.24) * wSunset;
+
+      vec3 cloudCol = mix(shdCol, litCol, lightTrans * 0.78 + 0.18);
+      cloudCol += litCol * silverLining * (0.24 * wNoon + 0.48 * wAsr + 0.75 * wSunset);
+      skyCol = mix(skyCol, cloudCol, totalCloud);
+    }
+
+    // Night Sky: Fine Pinpoint Starfield + Delicate Milky Way + Detailed Crescent Moon
+    float starVis = clamp(wNight + wSunset * 0.25 * smoothstep(0.32, 0.75, y), 0.0, 1.0);
+    if (starVis > 0.01 && y > 0.005) {
       skyCol += evalMilkyWay(dir, wNight);
       if (includeCelestial) {
-        float horizonMask = smoothstep(0.03, 0.25, y);
+        float hm = smoothstep(0.02, 0.22, y);
         vec3 stars = vec3(0.0);
-        stars += evalStarLayer(dir, 58.0, 0.91, 1.65, uTime);
-        stars += evalStarLayer(dir, 115.0, 0.86, 0.95, uTime * 0.8 + 1.7);
-        stars += evalStarLayer(dir, 195.0, 0.82, 0.48, uTime * 0.5 + 3.1);
-        skyCol += stars * horizonMask * starVis;
+        stars += evalPinpointStars(dir, 88.0, 0.90, 1.65, uTime);
+        stars += evalPinpointStars(dir, 165.0, 0.85, 0.95, uTime * 0.8 + 1.4);
+        stars += evalPinpointStars(dir, 260.0, 0.82, 0.45, uTime * 0.5 + 2.9);
+        skyCol += stars * hm * starVis;
       }
     }
 
@@ -223,57 +270,12 @@ const SKY_CORE_FUNCTIONS = /* glsl */ `
       skyCol += evalCrescentMoon(dir, sunDir, wNight);
     }
 
-    // Procedural Desert Clouds (Day/Asr/Sunset; faint moonlit wisps at Night)
-    int oct = int(uCloudOctaves + 0.5);
-    if (y > 0.02 && oct >= 1 && wNight < 0.92) {
-      vec2 cloudUV = dir.xz / (y + 0.22);
-      vec2 windDrift = vec2(uTime * 0.0042, uTime * 0.0016);
-
-      vec2 warp = vec2(
-        vnoise(cloudUV * 0.65 + windDrift * 0.7),
-        vnoise(cloudUV * 0.65 + vec2(4.2, 1.9) + windDrift * 0.5)
-      );
-      vec2 cirrusUV = cloudUV * vec2(0.55, 1.15) + warp * 0.55 + windDrift;
-      float nCirrus = fbmClouds(cirrusUV, oct);
-      float nPuff = fbmClouds(cloudUV * 1.15 - windDrift * 0.8 + warp * 0.25, max(2, oct - 1));
-      float cloudDensity = smoothstep(0.56, 0.83, nCirrus) * 0.62
-                         + smoothstep(0.64, 0.86, nPuff) * 0.32;
-
-      float horizonFade = smoothstep(0.04, 0.26, y);
-      cloudDensity = clamp(cloudDensity * horizonFade * (1.0 - uStorm * 0.85) * dayWeight, 0.0, 0.74);
-
-      float sunHighlight = pow(max(0.0, sunCos), 5.0);
-      float selfShade = smoothstep(0.15, 0.75, nPuff);
-
-      vec3 cLit =
-        vec3(0.92, 0.90, 0.84) * wNoon +
-        vec3(1.04, 0.58, 0.22) * wAsr +
-        vec3(1.18, 0.34, 0.14) * wSunset;
-      vec3 cShd =
-        vec3(0.38, 0.48, 0.62) * wNoon +
-        vec3(0.25, 0.17, 0.20) * wAsr +
-        vec3(0.12, 0.075, 0.15) * wSunset;
-
-      vec3 cloudCol = mix(cShd, cLit, 0.52 + 0.48 * (1.0 - selfShade));
-      cloudCol += cLit * sunHighlight * (0.24 * wNoon + 0.55 * wAsr + 0.85 * wSunset);
-      skyCol = mix(skyCol, cloudCol, cloudDensity);
-    }
-
-    // Light Canyon Dust Gust Haze
-    if (uStorm > 0.001) {
-      float stormHeight = smoothstep(0.85, -0.05, y);
-      float stormMix = clamp(uStorm * (0.52 + 0.42 * stormHeight), 0.0, 0.92);
-      vec3 stormZenith = uHorizonColor * vec3(0.86, 0.82, 0.77);
-      vec3 stormSky = mix(uHorizonColor, stormZenith, clamp(y, 0.0, 1.0));
-      skyCol = mix(skyCol, stormSky, stormMix);
-    }
-
-    // Seamless Horizon Melt into FogExp2
-    float horizonBlend = smoothstep(0.13 + uStorm * 0.14, -0.015, y);
+    // Seamless aerial horizon blend into FogExp2
+    float horizonBlend = smoothstep(0.15 + uStorm * 0.12, -0.015, y);
     skyCol = mix(skyCol, uHorizonColor, horizonBlend);
 
     if (y < 0.0) {
-      vec3 groundBounce = uHorizonColor * mix(vec3(0.62, 0.54, 0.44), vec3(0.38, 0.42, 0.52), wNight);
+      vec3 groundBounce = uHorizonColor * mix(vec3(0.66, 0.58, 0.48), vec3(0.45, 0.52, 0.64), wNight);
       skyCol = mix(uHorizonColor, groundBounce, smoothstep(0.0, -0.35, y));
     }
 
@@ -314,7 +316,6 @@ const SKY_CACHE_BAKE_FRAGMENT = /* glsl */ `
   }
 `;
 
-// Lightweight 1-tap cached sky dome for Mobile + razor-sharp analytical sun/stars/crescent moon!
 const SKY_CACHED_DOME_FRAGMENT = /* glsl */ `
   uniform sampler2D uSkyCache;
   uniform vec3 uSunDir;
@@ -332,23 +333,22 @@ const SKY_CACHED_DOME_FRAGMENT = /* glsl */ `
     return fract((p.xxy + p.yxx) * p.zyx);
   }
 
-  vec3 evalStarMobile(vec3 dir, float scale, float threshold, float brightness) {
+  vec3 evalStarFast(vec3 dir, float scale, float thresh, float power) {
     vec3 p = dir * scale;
     vec3 cell = floor(p);
     vec3 f = fract(p) - 0.5;
     vec3 rnd = hash33(cell);
-    if (rnd.x < threshold) return vec3(0.0);
-    float d = length(f - (rnd - 0.5) * 0.55);
-    float core = smoothstep(0.17, 0.02, d);
-    vec3 starCol = mix(vec3(1.0, 0.88, 0.70), vec3(0.76, 0.88, 1.0), rnd.y);
-    return starCol * core * brightness;
+    if (rnd.x < thresh) return vec3(0.0);
+    float d = length(f - (rnd - 0.5) * 0.6);
+    float star = exp(-d * d * 185.0);
+    vec3 col = mix(vec3(1.0, 0.88, 0.72), vec3(0.76, 0.88, 1.0), rnd.y);
+    return col * star * power;
   }
 
   void main() {
     vec3 dir = normalize(vWorldDir);
     float u = atan(dir.z, dir.x) * INV_TWO_PI + 0.5;
     float v = clamp(asin(clamp(dir.y, -1.0, 1.0)) * INV_PI + 0.5, 0.002, 0.998);
-
     vec3 skyCol = texture2D(uSkyCache, vec2(u, v)).rgb * 2.0;
 
     float m = clamp(uSkyMode, 0.0, 3.0);
@@ -359,30 +359,29 @@ const SKY_CACHED_DOME_FRAGMENT = /* glsl */ `
     float sunCos = dot(dir, sDir);
 
     if (dayWeight > 0.01) {
-      float sunRadius = mix(0.99962, 0.99920, wSunset);
-      float disc = smoothstep(sunRadius - 0.00022, sunRadius + 0.00014, sunCos);
+      float sunRadius = mix(0.99966, 0.99932, wSunset);
+      float disc = smoothstep(sunRadius - 0.00018, sunRadius + 0.00012, sunCos);
       float limb = pow(clamp((sunCos - sunRadius) / (1.0 - sunRadius + 0.0001), 0.0, 1.0), 0.45);
-      vec3 discCol = mix(vec3(1.0, 0.96, 0.86), vec3(1.25, 0.42, 0.09), clamp(m * 0.5, 0.0, 1.0)) * (2.6 + limb * 3.4);
-      float sunVis = (1.0 - smoothstep(0.15, 0.82, uStorm)) * smoothstep(-0.02, 0.015, dir.y) * dayWeight;
+      vec3 discCol = mix(vec3(1.0, 0.97, 0.88), vec3(1.22, 0.62, 0.26), clamp(m * 0.5, 0.0, 1.0)) * (2.5 + limb * 3.0);
+      float sunVis = (1.0 - smoothstep(0.18, 0.85, uStorm)) * smoothstep(-0.015, 0.015, dir.y) * dayWeight;
       skyCol += discCol * disc * sunVis;
     }
 
-    if (wNight > 0.01 && dir.y > 0.01) {
-      float hm = smoothstep(0.03, 0.25, dir.y);
-      skyCol += evalStarMobile(dir, 62.0, 0.91, 1.55) * hm * wNight;
-      skyCol += evalStarMobile(dir, 125.0, 0.87, 0.85) * hm * wNight;
+    if (wNight > 0.01 && dir.y > 0.005) {
+      float hm = smoothstep(0.02, 0.22, dir.y);
+      skyCol += evalStarFast(dir, 92.0, 0.90, 1.55) * hm * wNight;
+      skyCol += evalStarFast(dir, 170.0, 0.86, 0.85) * hm * wNight;
 
-      // Crisp Crescent Moon
       vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), sDir));
       vec3 up = normalize(cross(sDir, right));
-      skyCol += vec3(0.45, 0.62, 0.92) * (pow(max(0.0, sunCos), 30.0) * 0.16 + pow(max(0.0, sunCos), 240.0) * 0.34) * wNight;
-      if (sunCos > 0.994) {
+      skyCol += vec3(0.42, 0.58, 0.88) * (pow(max(0.0, sunCos), 14.0) * 0.07 + pow(max(0.0, sunCos), 180.0) * 0.24) * wNight;
+      if (sunCos > 0.995) {
         vec3 delta = dir - sDir * sunCos;
         vec2 mp = vec2(dot(delta, right), dot(delta, up));
-        float moonR = 0.0245;
-        float outerDisc = smoothstep(moonR + 0.0014, moonR - 0.0014, length(mp));
-        float shadowCut = smoothstep(moonR * 0.90 - 0.0014, moonR * 0.90 + 0.0014, length(mp - vec2(0.0125, 0.0085)));
-        skyCol += vec3(1.55, 1.50, 1.38) * (outerDisc * shadowCut) * wNight;
+        float moonR = 0.022;
+        float outerDisc = smoothstep(moonR + 0.0011, moonR - 0.0011, length(mp));
+        float shadowCut = smoothstep(moonR * 0.91 - 0.0011, moonR * 0.91 + 0.0011, length(mp - vec2(0.0112, 0.0076)));
+        skyCol += vec3(1.52, 1.48, 1.38) * (outerDisc * shadowCut) * wNight;
       }
     }
 
@@ -392,15 +391,10 @@ const SKY_CACHED_DOME_FRAGMENT = /* glsl */ `
   }
 `;
 
-/**
- * 100% Procedural Code-Rendered 4-Phase Arabian Desert Sky Dome (v5.0)
- * Noon • Afternoon • Sunset/Twilight • Starry Milky Way & Crescent Moon Night
- */
 export class ProceduralSky {
   constructor(scene, renderer) {
     this.scene = scene;
     this.renderer = renderer;
-
     this.useCache = false;
     this.useIBL = true;
 
@@ -409,11 +403,11 @@ export class ProceduralSky {
       uSkyMode: { value: 0.0 },
       uTime: { value: 0.0 },
       uStorm: { value: 0.0 },
-      uCloudOctaves: { value: 4.0 },
+      uCloudOctaves: { value: 5.0 },
       uHorizonColor: { value: DESERT_PALETTE.horizonNoon.clone() },
     };
 
-    const skyGeo = new THREE.SphereGeometry(960, 28, 18);
+    const skyGeo = new THREE.SphereGeometry(980, 28, 18);
     this._realtimeMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
@@ -468,15 +462,9 @@ export class ProceduralSky {
     this.scene.add(this.mesh);
 
     this._cacheTimer = 999;
-    this._lastCacheMode = -999;
-    this._lastCacheStorm = -999;
-
     this._pmrem = null;
     this._envScene = null;
     this._envRT = null;
-    this._lastBakeMode = -999;
-    this._lastBakeStorm = -999;
-    this._bakeCooldown = 0;
   }
 
   _ensureIBLScene() {
@@ -484,21 +472,20 @@ export class ProceduralSky {
     this._pmrem = new THREE.PMREMGenerator(this.renderer);
     this._pmrem.compileCubemapShader();
     this._envScene = new THREE.Scene();
-    const envUniforms = {
-      uSunDir: this.uniforms.uSunDir,
-      uSkyMode: this.uniforms.uSkyMode,
-      uTime: { value: 0.0 },
-      uStorm: this.uniforms.uStorm,
-      uCloudOctaves: { value: 2.0 },
-      uHorizonColor: this.uniforms.uHorizonColor,
-    };
     const envSphere = new THREE.Mesh(
       new THREE.SphereGeometry(20, 14, 10),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
         fog: false,
-        uniforms: envUniforms,
+        uniforms: {
+          uSunDir: this.uniforms.uSunDir,
+          uSkyMode: this.uniforms.uSkyMode,
+          uTime: { value: 0.0 },
+          uStorm: this.uniforms.uStorm,
+          uCloudOctaves: { value: 2.0 },
+          uHorizonColor: this.uniforms.uHorizonColor,
+        },
         vertexShader: SKY_VERTEX_SHADER,
         fragmentShader: SKY_REALTIME_FRAGMENT,
       })
@@ -506,14 +493,11 @@ export class ProceduralSky {
     this._envScene.add(envSphere);
   }
 
-  setQualityOptions({ cloudOctaves = 4, useSkyCache = false, useIBL = true }) {
+  setQualityOptions({ cloudOctaves = 5, useSkyCache = false, useIBL = true }) {
     this.uniforms.uCloudOctaves.value = cloudOctaves;
     this.useCache = Boolean(useSkyCache);
     this.mesh.material = this.useCache ? this._cachedMat : this._realtimeMat;
-    if (this.useCache) {
-      this._cacheTimer = 999;
-      this.bakeSkyCache();
-    }
+    if (this.useCache) this.bakeSkyCache();
 
     this.useIBL = Boolean(useIBL);
     if (!this.useIBL) {
@@ -523,7 +507,7 @@ export class ProceduralSky {
         this._envRT = null;
       }
     } else if (!this._envRT) {
-      this.bakeIBL(this.uniforms.uSkyMode.value, this.uniforms.uStorm.value);
+      this.bakeIBL();
     }
   }
 
@@ -536,19 +520,18 @@ export class ProceduralSky {
     this.renderer.setRenderTarget(prevTarget);
     this.renderer.toneMapping = prevToneMapping;
     this._cacheTimer = 0;
-    this._lastCacheMode = this.uniforms.uSkyMode.value;
-    this._lastCacheStorm = this.uniforms.uStorm.value;
   }
 
   computeHorizonColor(stageId, storm, outColor) {
     const atmos = STAGE_ATMOSPHERES[stageId] || STAGE_ATMOSPHERES[1];
     outColor.copy(atmos.horizonColor);
     if (storm > 0.001) {
-      outColor.lerp(DESERT_PALETTE.horizonStorm, THREE.MathUtils.clamp(storm * 0.72, 0, 0.85));
+      outColor.lerp(DESERT_PALETTE.horizonStorm, THREE.MathUtils.clamp(storm * 0.45, 0, 0.55));
     }
     return outColor;
   }
 
+  // Zero PMREM rebakes during gameplay movement -> eliminates all movement frame drops!
   update(dt, elapsed, cameraPos, sunDir, skyMode, stageId, storm) {
     this.mesh.position.copy(cameraPos);
     this.uniforms.uSunDir.value.copy(sunDir);
@@ -559,29 +542,15 @@ export class ProceduralSky {
 
     if (this.useCache) {
       this._cacheTimer += dt;
-      const mDelta = Math.abs(skyMode - this._lastCacheMode);
-      const sDelta = Math.abs(storm - this._lastCacheStorm);
-      if (this._cacheTimer >= 1.2 || mDelta > 0.02 || sDelta > 0.03) {
+      if (this._cacheTimer >= 2.0) {
         this.bakeSkyCache();
-      }
-    }
-
-    if (this.useIBL) {
-      this._bakeCooldown = Math.max(0, this._bakeCooldown - dt);
-      const mDelta = Math.abs(skyMode - this._lastBakeMode);
-      const sDelta = Math.abs(storm - this._lastBakeStorm);
-      if (this._bakeCooldown <= 0 && (mDelta > 0.05 || sDelta > 0.08 || !this._envRT)) {
-        this.bakeIBL(skyMode, storm);
-        this._bakeCooldown = 0.65;
       }
     }
   }
 
-  bakeIBL(skyMode, storm) {
+  bakeIBL() {
     if (!this.useIBL) return;
     this._ensureIBLScene();
-    this._lastBakeMode = skyMode;
-    this._lastBakeStorm = storm;
     const prevRT = this._envRT;
     this._envRT = this._pmrem.fromScene(this._envScene, 0.04, 0.1, 100);
     this.scene.environment = this._envRT.texture;

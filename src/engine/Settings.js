@@ -1,11 +1,12 @@
 /**
- * Thermal-Aware Graphics, Controls & Audio Settings (v5.0):
- * - Baked Lighting & Contact AO provides rich grounded shading on mobile WITHOUT needing
- *   real-time shadow-map redraws or lowering display resolution!
- * - True FPS pacer (45 FPS mobile default, 30 FPS Cool Mode) + mobile sky cache (-95% sky GPU power).
+ * High-Fidelity Smooth-60FPS Graphics, Controls & Audio Settings — SARAB v6.0
+ * - Default Quality: 'ultra' (فائق)
+ * - Default Sensitivity: 2.8x
+ * - Default Resolution Scale: 1.4 (أقصى دقة متوفرة — 140% clamped cleanly to native DPR for crisp visuals + 60FPS!)
+ * - Zero runtime shader recompilation & zero shadow hitching during movement!
  */
 
-const STORAGE_KEY = 'sarab_settings_v50';
+const STORAGE_KEY = 'sarab_settings_v60';
 
 export const IS_MOBILE =
   typeof window !== 'undefined' &&
@@ -15,11 +16,10 @@ export const IS_MOBILE =
 export const QUALITY_PRESETS = {
   low: {
     label: 'منخفض',
-    dprCap: 0.95,
+    dprCap: 1.0,
     shadowMapSize: 512,
     shadows: false,
     dustCount: 70,
-    stormStreaks: 90,
     cloudOctaves: 2,
     useSkyCache: true,
     useIBL: false,
@@ -29,57 +29,54 @@ export const QUALITY_PRESETS = {
   },
   medium: {
     label: 'متوسط',
-    dprCap: 1.15,
-    shadowMapSize: 512,
-    shadows: !IS_MOBILE, // Mobile uses Baked Lighting & Contact AO for ultra-cool battery + full sharp resolution!
+    dprCap: 1.25,
+    shadowMapSize: 1024,
+    shadows: !IS_MOBILE,
     dustCount: 120,
-    stormStreaks: 150,
     cloudOctaves: 3,
     useSkyCache: IS_MOBILE,
-    useIBL: !IS_MOBILE,
-    anisotropy: 2,
+    useIBL: false,
+    anisotropy: 4,
     sunFlare: true,
     resolutionScale: 1.0,
   },
   high: {
     label: 'عالي',
-    dprCap: 1.4,
+    dprCap: 1.65,
     shadowMapSize: IS_MOBILE ? 1024 : 2048,
     shadows: true,
-    dustCount: 220,
-    stormStreaks: 240,
+    dustCount: 190,
     cloudOctaves: 4,
-    useSkyCache: IS_MOBILE,
+    useSkyCache: false,
     useIBL: true,
-    anisotropy: 4,
+    anisotropy: 6,
     sunFlare: true,
-    resolutionScale: 1.0,
+    resolutionScale: 1.2,
   },
   ultra: {
     label: 'فائق',
-    dprCap: 1.75,
-    shadowMapSize: 2048,
+    dprCap: 2.0,
+    shadowMapSize: IS_MOBILE ? 1024 : 2048,
     shadows: true,
-    dustCount: 300,
-    stormStreaks: 300,
+    dustCount: 240,
     cloudOctaves: 5,
     useSkyCache: false,
     useIBL: true,
     anisotropy: 8,
     sunFlare: true,
-    resolutionScale: 1.1,
+    resolutionScale: 1.4,
   },
 };
 
 export const DEFAULT_SETTINGS = {
-  quality: IS_MOBILE ? 'medium' : 'high',
-  fpsCap: IS_MOBILE ? 45 : 60,
+  quality: 'ultra',
+  fpsCap: 60,
   batterySaver: false,
-  sensitivity: 2.2,
-  resolutionScale: 1.0, // Keep full crisp display resolution even on mobile!
+  sensitivity: 2.8,
+  resolutionScale: 1.4,
   fov: 72,
   volume: 0.85,
-  shadows: !IS_MOBILE,
+  shadows: true,
   sunFlare: true,
   dustStorm: true,
   showFps: false,
@@ -113,9 +110,8 @@ export class SettingsManager {
   }
 
   getPreset() {
-    const base = QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.medium;
+    const base = QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.ultra;
     if (!this.data.batterySaver) return base;
-    // Cool / Battery Saver relies on Baked Lighting & Contact AO + 30 FPS cap + Sky Cache WITHOUT lowering resolution!
     return {
       ...base,
       shadows: false,
@@ -123,15 +119,14 @@ export class SettingsManager {
       useSkyCache: true,
       useIBL: false,
       cloudOctaves: 2,
-      dustCount: Math.min(base.dustCount, 60),
-      stormStreaks: Math.min(base.stormStreaks, 85),
+      dustCount: Math.min(base.dustCount, 65),
       anisotropy: 2,
     };
   }
 
   getEffectiveFpsCap() {
     if (this.data.batterySaver) return Math.min(30, this.data.fpsCap || 30);
-    return this.data.fpsCap || (IS_MOBILE ? 45 : 60);
+    return this.data.fpsCap || 60;
   }
 
   applyQualityPreset(quality) {

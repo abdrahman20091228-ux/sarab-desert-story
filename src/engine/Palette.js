@@ -1,141 +1,135 @@
 import * as THREE from 'three';
 
 /**
- * Unified Arabian Desert Color Palette & Lightweight Shader Grading (v5.0)
- * 4-Stage Full Diurnal Palette:
- *   Stage 1: Noon (الظهر) — Open Mirage Plains & Cracked Sabkha
- *   Stage 2: Afternoon (العصر) — Rocky Canyon, Stratified Cliffs & Palms
- *   Stage 3: Sunset/Dusk (الغروب/الشفق) — High Mountain Peak Overlooking Sea of Dunes
- *   Stage 4: Night (الليل) — Starry Desert, Milky Way, Crescent Moon & Abandoned House
+ * Unified Realistic Arabian Desert Color Palette — SARAB v6.0
+ * - Harmonized across all 4 diurnal stages (Noon, Afternoon Canyon, Sunset Summit, Moonlit Night)
+ * - Moonlit Night is naturally legible in cool silver-blue moonlight EVEN WITHOUT THE FLASHLIGHT!
  */
 export const STAGE_ATMOSPHERES = {
   1: {
     id: 1,
     key: 'noon',
-    name: 'المرحلة ١ • سهول السراب',
+    name: 'الفصل ١ • سهول السراب',
     timeLabel: '١٢:٣٠ ظهراً',
     sunIcon: '☀',
-    sunElevDeg: 54.0,
-    sunAzimDeg: -142.0,
-    skyMode: 0.0, // 0=Noon, 1=Asr, 2=Sunset, 3=Night
-    sunColor: new THREE.Color('#fff7e6'),
-    sunIntensity: 3.05,
-    hemiSky: new THREE.Color('#8ec0eb'),
-    hemiGround: new THREE.Color('#cfa879'),
-    hemiIntensity: 1.05,
-    bounceColor: new THREE.Color('#ebd0a2'),
-    bounceIntensity: 0.42,
-    horizonColor: new THREE.Color('#e6d7bc'),
-    fogDensity: 0.0021,
+    sunElevDeg: 52.0,
+    sunAzimDeg: -140.0,
+    skyMode: 0.0,
+    sunColor: new THREE.Color('#fff7e8'),
+    sunIntensity: 3.0,
+    hemiSky: new THREE.Color('#96c4ec'),
+    hemiGround: new THREE.Color('#cfb088'),
+    hemiIntensity: 1.08,
+    bounceColor: new THREE.Color('#ecd3aa'),
+    bounceIntensity: 0.44,
+    horizonColor: new THREE.Color('#e2d4bc'),
+    fogDensity: 0.0018,
     exposure: 0.96,
     interiorExposure: 1.15,
-    dustColor: new THREE.Color('#f0dab6'),
-    dustOpacity: 0.24,
+    dustColor: new THREE.Color('#eee0c4'),
+    dustOpacity: 0.18,
     stormBase: 0.0,
-    heatHaze: 0.46,
-    sandTint: new THREE.Color('#f4e8d2'),
-    bakedAmbient: new THREE.Color('#c8b69b'),
-    bakedSunTint: new THREE.Color('#fff5e0'),
+    heatHaze: 0.34,
+    sandTint: new THREE.Color('#f2e6cf'),
+    rockTint: new THREE.Color('#cfb798'),
   },
   2: {
     id: 2,
     key: 'asr',
-    name: 'المرحلة ٢ • وادي الصخور',
-    timeLabel: '٣:٥٠ عصراً',
+    name: 'الفصل ٢ • وادي الصخور والواحة',
+    timeLabel: '٣:٥٥ عصراً',
     sunIcon: '☀',
-    sunElevDeg: 22.5,
-    sunAzimDeg: -116.0,
+    sunElevDeg: 26.0,
+    sunAzimDeg: -112.0,
     skyMode: 1.0,
-    sunColor: new THREE.Color('#ffc17a'),
-    sunIntensity: 2.75,
-    hemiSky: new THREE.Color('#d9a574'),
-    hemiGround: new THREE.Color('#9c6e44'),
-    hemiIntensity: 0.96,
-    bounceColor: new THREE.Color('#dd9b5c'),
-    bounceIntensity: 0.36,
-    horizonColor: new THREE.Color('#dfa770'),
-    fogDensity: 0.0032,
-    exposure: 1.04,
+    sunColor: new THREE.Color('#ffd096'),
+    sunIntensity: 2.8,
+    hemiSky: new THREE.Color('#c8b096'),
+    hemiGround: new THREE.Color('#a47e58'),
+    hemiIntensity: 1.06,
+    bounceColor: new THREE.Color('#dfb07c'),
+    bounceIntensity: 0.42,
+    horizonColor: new THREE.Color('#d8b084'),
+    fogDensity: 0.0024,
+    exposure: 1.02,
     interiorExposure: 1.18,
-    dustColor: new THREE.Color('#e6b47a'),
-    dustOpacity: 0.34,
-    stormBase: 0.24, // Light periodic dust gusts through the canyon
-    heatHaze: 0.26,
-    sandTint: new THREE.Color('#eccba2'),
-    bakedAmbient: new THREE.Color('#a88764'),
-    bakedSunTint: new THREE.Color('#ffcb8c'),
+    dustColor: new THREE.Color('#e2bc8e'),
+    dustOpacity: 0.24,
+    stormBase: 0.16, // Gentle natural canyon breeze haze (zero ugly streak lines!)
+    heatHaze: 0.18,
+    sandTint: new THREE.Color('#ebd2b0'),
+    rockTint: new THREE.Color('#c9a47e'),
   },
   3: {
     id: 3,
     key: 'sunset',
-    name: 'المرحلة ٣ • قمة جبل السراب',
-    timeLabel: '٦:١٢ مغرباً',
+    name: 'الفصل ٣ • قمة جبل السراب',
+    timeLabel: '٦:٠٨ مغرباً',
     sunIcon: '◐',
-    sunElevDeg: 5.2,
-    sunAzimDeg: -168.0,
+    sunElevDeg: 6.2,
+    sunAzimDeg: -165.0,
     skyMode: 2.0,
-    sunColor: new THREE.Color('#ff9a5c'),
+    sunColor: new THREE.Color('#ffad72'),
     sunIntensity: 2.35,
-    hemiSky: new THREE.Color('#9a7ea6'),
-    hemiGround: new THREE.Color('#7a5b48'),
-    hemiIntensity: 1.02,
-    bounceColor: new THREE.Color('#d88c5e'),
-    bounceIntensity: 0.34,
-    horizonColor: new THREE.Color('#d67f58'),
-    fogDensity: 0.0017,
-    exposure: 1.06,
+    hemiSky: new THREE.Color('#9e88ac'),
+    hemiGround: new THREE.Color('#7f6556'),
+    hemiIntensity: 1.08,
+    bounceColor: new THREE.Color('#d69c78'),
+    bounceIntensity: 0.38,
+    horizonColor: new THREE.Color('#cfa084'),
+    fogDensity: 0.0014,
+    exposure: 1.04,
     interiorExposure: 1.18,
-    dustColor: new THREE.Color('#df9974'),
-    dustOpacity: 0.18,
+    dustColor: new THREE.Color('#dfb092'),
+    dustOpacity: 0.14,
     stormBase: 0.0,
-    heatHaze: 0.10,
-    sandTint: new THREE.Color('#e4c6ae'),
-    bakedAmbient: new THREE.Color('#866e7e'),
-    bakedSunTint: new THREE.Color('#ffa870'),
+    heatHaze: 0.08,
+    sandTint: new THREE.Color('#e5cbb4'),
+    rockTint: new THREE.Color('#bfa18c'),
   },
   4: {
     id: 4,
     key: 'night',
-    name: 'المرحلة ٤ • البيت المهجور ليلاً',
+    name: 'الفصل ٤ • البيت المهجور تحت النجوم',
     timeLabel: '١٠:٤٠ ليلاً',
     sunIcon: '☽',
-    sunElevDeg: 34.0,
-    sunAzimDeg: -152.0,
+    sunElevDeg: 36.0,
+    sunAzimDeg: -150.0,
     skyMode: 3.0,
-    sunColor: new THREE.Color('#9cc2f2'),
-    sunIntensity: 0.62,
-    hemiSky: new THREE.Color('#283f68'),
-    hemiGround: new THREE.Color('#1c1b24'),
-    hemiIntensity: 0.64,
-    bounceColor: new THREE.Color('#344e78'),
-    bounceIntensity: 0.18,
-    horizonColor: new THREE.Color('#0f1a2e'),
-    fogDensity: 0.0031,
-    exposure: 1.06,
-    interiorExposure: 1.18,
-    dustColor: new THREE.Color('#7a92b8'),
-    dustOpacity: 0.13,
+    // Realistic bright Arabian moonlit night: clearly navigable even with flashlight OFF!
+    sunColor: new THREE.Color('#a4caf5'),
+    sunIntensity: 1.38,
+    hemiSky: new THREE.Color('#4668a6'),
+    hemiGround: new THREE.Color('#2c354c'),
+    hemiIntensity: 1.18,
+    bounceColor: new THREE.Color('#5678b2'),
+    bounceIntensity: 0.42,
+    horizonColor: new THREE.Color('#1a2742'),
+    fogDensity: 0.0024,
+    exposure: 1.12,
+    interiorExposure: 1.22,
+    dustColor: new THREE.Color('#8ea8cc'),
+    dustOpacity: 0.11,
     stormBase: 0.0,
     heatHaze: 0.0,
-    sandTint: new THREE.Color('#a4b6ce'),
-    bakedAmbient: new THREE.Color('#425475'),
-    bakedSunTint: new THREE.Color('#a8c8f2'),
+    sandTint: new THREE.Color('#bccde4'),
+    rockTint: new THREE.Color('#9cb0cb'),
   },
 };
 
 export const DESERT_PALETTE = {
-  sandTintNoon: new THREE.Color('#f4e8d2'),
-  sandTintAsr: new THREE.Color('#eccba2'),
-  mesaBase: new THREE.Color('#c4a17b'),
-  mesaStrataDark: new THREE.Color('#94724f'),
-  adobeWall: new THREE.Color('#d0be9f'),
-  ceilingPlaster: new THREE.Color('#d9ceb9'),
-  weatheredWood: new THREE.Color('#8b6d4e'),
-  horizonNoon: new THREE.Color('#e6d7bc'),
-  horizonAsr: new THREE.Color('#dfa770'),
-  horizonSunset: new THREE.Color('#c96a48'),
-  horizonNight: new THREE.Color('#0c1424'),
-  horizonStorm: new THREE.Color('#c89258'),
+  sandTintNoon: new THREE.Color('#f2e6cf'),
+  sandTintAsr: new THREE.Color('#ebd2b0'),
+  mesaBase: new THREE.Color('#c9ab87'),
+  mesaStrataDark: new THREE.Color('#977858'),
+  adobeWall: new THREE.Color('#d4c2a5'),
+  ceilingPlaster: new THREE.Color('#dbd0bc'),
+  weatheredWood: new THREE.Color('#8d7052'),
+  horizonNoon: new THREE.Color('#e2d4bc'),
+  horizonAsr: new THREE.Color('#d8b084'),
+  horizonSunset: new THREE.Color('#cfa084'),
+  horizonNight: new THREE.Color('#1a2742'),
+  horizonStorm: new THREE.Color('#cfa372'),
 };
 
 export const SHARED_GRADE_UNIFORMS = {
@@ -147,14 +141,13 @@ export const SHARED_GRADE_UNIFORMS = {
 
 /**
  * Lightweight unified desert color grading + optional aerial perspective.
- * Zero extra render targets (mobile thermal-safe).
  */
 export function attachDesertGrading(material, options = {}) {
-  const sat = options.saturation ?? 0.94;
-  const contrast = options.contrast ?? 1.03;
+  const sat = options.saturation ?? 0.93;
+  const contrast = options.contrast ?? 1.02;
   const aerialStrength = options.aerialStrength ?? 0.0;
-  const aerialStart = options.aerialStart ?? 55.0;
-  const aerialEnd = options.aerialEnd ?? 240.0;
+  const aerialStart = options.aerialStart ?? 65.0;
+  const aerialEnd = options.aerialEnd ?? 290.0;
 
   const prevCompile = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
@@ -187,9 +180,9 @@ export function attachDesertGrading(material, options = {}) {
       aerialStrength > 0.001
         ? `
           float _apF = smoothstep(${aerialStart.toFixed(1)}, ${aerialEnd.toFixed(1)}, vAerialDist);
-          float _apMix = clamp(_apF * (${aerialStrength.toFixed(3)} + uGradeStorm * 0.36), 0.0, 0.86);
+          float _apMix = clamp(_apF * (${aerialStrength.toFixed(3)} + uGradeStorm * 0.25), 0.0, 0.82);
           float _apLuma = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-          vec3 _apDesat = mix(gl_FragColor.rgb, vec3(_apLuma), _apF * 0.32);
+          vec3 _apDesat = mix(gl_FragColor.rgb, vec3(_apLuma), _apF * 0.28);
           gl_FragColor.rgb = mix(_apDesat, uGradeHorizon, _apMix);
         `
         : '';
@@ -212,6 +205,6 @@ export function attachDesertGrading(material, options = {}) {
   };
 
   material.customProgramCacheKey = () =>
-    `desert_grade_v5_${sat}_${contrast}_${aerialStrength}_${material.name || ''}`;
+    `desert_grade_v6_${sat}_${contrast}_${aerialStrength}_${material.name || ''}`;
   return material;
 }

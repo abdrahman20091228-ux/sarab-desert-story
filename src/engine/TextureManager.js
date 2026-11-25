@@ -6,15 +6,17 @@ const IS_MOBILE =
     ('ontouchstart' in window && Math.min(window.innerWidth, window.innerHeight) < 920));
 
 /**
- * Loads and caches our real photographed Poly Haven / ambientCG PBR texture sets
- * in ultra-fast WebP format (automatically using 512x512 tier on mobile GPUs to save 75% VRAM & bandwidth).
+ * Loads and caches PBR texture sets + high-craft procedural botanical & decal textures (v6.0):
+ * - Uses full 1024x1024 WebP on Ultra/High and 512x512 on Low/Medium mobile
+ * - Procedural photorealistic pinnate Arabian date-palm frond texture (feathered leaflets!)
+ * - Procedural fibrous ringed palm bark texture
  */
 export class TextureManager {
   constructor(renderer) {
     this.renderer = renderer;
     this.loader = new THREE.TextureLoader();
     this.sets = new Map();
-    this.anisotropy = Math.min(IS_MOBILE ? 4 : 8, renderer.capabilities.getMaxAnisotropy());
+    this.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   }
 
   setAnisotropy(val) {
@@ -42,7 +44,8 @@ export class TextureManager {
       return tex;
     };
 
-    const suffix = IS_MOBILE ? '_512.webp' : '.webp';
+    // Keep full sharp 1024x1024 WebP textures so desert sand & canyon rock stay crystal clear!
+    const suffix = '.webp';
     const base = `./textures/${name}`;
     const map = configure(this.loader.load(`${base}_albedo${suffix}`), true);
     const normalMap = configure(this.loader.load(`${base}_normal${suffix}`), false);
@@ -61,10 +64,10 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     const grad = ctx.createRadialGradient(size / 2, size / 2, 4, size / 2, size / 2, size / 2);
-    grad.addColorStop(0.0, 'rgba(32, 20, 10, 0.42)');
-    grad.addColorStop(0.38, 'rgba(38, 24, 12, 0.24)');
-    grad.addColorStop(0.72, 'rgba(42, 28, 14, 0.06)');
-    grad.addColorStop(1.0, 'rgba(42, 28, 14, 0.0)');
+    grad.addColorStop(0.0, 'rgba(28, 18, 10, 0.44)');
+    grad.addColorStop(0.42, 'rgba(34, 22, 12, 0.24)');
+    grad.addColorStop(0.75, 'rgba(38, 26, 14, 0.06)');
+    grad.addColorStop(1.0, 'rgba(38, 26, 14, 0.0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     const tex = new THREE.CanvasTexture(canvas);
@@ -72,59 +75,136 @@ export class TextureManager {
     return tex;
   }
 
-  createTwigClusterTexture() {
-    if (this._twigTex) return this._twigTex;
-    const size = 256;
+  /**
+   * Photorealistic pinnate Arabian date palm frond texture (central woody rachis + 42 pairs of feathered leaflets!)
+   * Eliminates the old "spiky flat green triangle" palm tree look completely!
+   */
+  createPalmFrondTexture() {
+    if (this._palmFrondTex) return this._palmFrondTex;
+    const w = 256;
+    const h = 512;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
+    ctx.clearRect(0, 0, w, h);
 
-    const cx = size * 0.5;
-    const cy = size * 0.5;
-    let seed = 31337;
-    const rand = () => {
-      seed = (seed * 16807) % 2147483647;
-      return (seed - 1) / 2147483646;
-    };
+    const cx = w * 0.5;
 
-    // Draw dense organic intertwined dry desert brambles filling the entire circular volume (zero center hole!)
-    for (let i = 0; i < 210; i++) {
-      const a1 = rand() * Math.PI * 2;
-      const r1 = Math.pow(rand(), 0.75) * 0.44 * size;
-      const a2 = a1 + (rand() - 0.5) * 2.8 + (r1 < size * 0.14 ? Math.PI : 0);
-      const r2 = (0.04 + Math.pow(rand(), 0.65) * 0.42) * size;
-      const x1 = cx + Math.cos(a1) * r1;
-      const y1 = cy + Math.sin(a1) * r1;
-      const x2 = cx + Math.cos(a2) * r2;
-      const y2 = cy + Math.sin(a2) * r2;
-      const mx = (x1 + x2) * 0.5 + (rand() - 0.5) * 28;
-      const my = (y1 + y2) * 0.5 + (rand() - 0.5) * 28;
+    // 1. Central woody palm spine (rachis) tapering from base (y=h) to tip (y=12)
+    for (let y = h - 6; y >= 14; y -= 2) {
+      const t = 1.0 - y / h;
+      const spineW = 7.5 * (1.0 - t * 0.78);
+      const r = Math.round(118 + t * 24);
+      const g = Math.round(108 + t * 26);
+      const b = Math.round(64 + t * 14);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(cx - spineW * 0.5, y, spineW, 3);
+    }
 
-      const shade = Math.round(132 + rand() * 68);
-      ctx.strokeStyle = `rgb(${shade}, ${Math.round(shade * 0.84)}, ${Math.round(shade * 0.58)})`;
-      ctx.lineWidth = 1.4 + rand() * 2.0;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.quadraticCurveTo(mx, my, x2, y2);
-      ctx.stroke();
+    // 2. 44 pairs of individual slender sun-dappled desert palm leaflets radiating gracefully from spine
+    let seed = 7717;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
 
-      if (rand() > 0.4) {
-        const bx = mx + (rand() - 0.5) * 16;
-        const by = my + (rand() - 0.5) * 16;
-        ctx.lineWidth = 1.0;
+    const pairs = 44;
+    for (let i = 0; i < pairs; i++) {
+      const t = 0.06 + (i / (pairs - 1)) * 0.90; // 0.06 at base -> 0.96 near tip
+      const yBase = h * (1.0 - t);
+      // Leaflets longest in the middle of the frond, tapering at base and tip
+      const envelope = Math.sin(Math.pow(t, 0.85) * Math.PI);
+      const maxLen = (w * 0.47) * (0.28 + 0.72 * envelope);
+
+      for (const side of [-1, 1]) {
+        const jitter = (rand() - 0.5) * 0.16;
+        const len = maxLen * (0.86 + rand() * 0.22);
+        // Swept slightly upward toward frond tip and gently drooping at outer end
+        const endX = cx + side * len;
+        const endY = yBase - len * (0.34 + t * 0.35) + jitter * 18;
+        const ctrlX = cx + side * len * 0.55;
+        const ctrlY = yBase - len * (0.32 + t * 0.22) - 4;
+
+        // Natural sunlit desert olive-sage green with subtle warm dry tips
+        const sunVar = rand();
+        const rBase = Math.round(86 + sunVar * 34 + (t > 0.78 ? 18 : 0));
+        const gBase = Math.round(104 + sunVar * 36);
+        const bBase = Math.round(54 + sunVar * 20);
+
+        const grad = ctx.createLinearGradient(cx, yBase, endX, endY);
+        grad.addColorStop(0.0, `rgb(${Math.round(rBase * 0.84)}, ${Math.round(gBase * 0.88)}, ${Math.round(bBase * 0.82)})`);
+        grad.addColorStop(0.65, `rgb(${rBase}, ${gBase}, ${bBase})`);
+        grad.addColorStop(1.0, `rgb(${Math.min(220, rBase + 28)}, ${Math.min(210, gBase + 16)}, ${Math.min(140, bBase + 10)})`);
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 4.4 * (0.55 + 0.45 * envelope);
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(bx, by);
+        ctx.moveTo(cx + side * 2, yBase);
+        ctx.quadraticCurveTo(ctrlX, ctrlY, endX, endY);
+        ctx.stroke();
+
+        // Crisp midrib highlight line along leaflet
+        ctx.strokeStyle = `rgba(175, 185, 118, 0.32)`;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 2, yBase);
+        ctx.quadraticCurveTo(ctrlX, ctrlY - 0.8, endX, endY);
         ctx.stroke();
       }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    this._twigTex = tex;
+    tex.anisotropy = this.anisotropy;
+    this._palmFrondTex = tex;
+    return tex;
+  }
+
+  /**
+   * Weathered ringed Arabian date-palm trunk bark texture (warm tan-gray diamond leaf scars, NOT dark black!)
+   */
+  createPalmBarkTexture() {
+    if (this._palmBarkTex) return this._palmBarkTex;
+    const w = 256;
+    const h = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#9c866b';
+    ctx.fillRect(0, 0, w, h);
+
+    // Fibrous horizontal leaf-base scars typical of date palms
+    const rows = 26;
+    const rowH = h / rows;
+    for (let r = 0; r < rows; r++) {
+      const y = r * rowH;
+      const offset = (r % 2) * 32;
+      // Dark crevice between bark rings
+      ctx.fillStyle = 'rgba(62, 48, 34, 0.58)';
+      ctx.fillRect(0, y, w, 3.5);
+      // Warm sunlit dry husk ridge
+      ctx.fillStyle = 'rgba(186, 162, 132, 0.45)';
+      ctx.fillRect(0, y + 3.5, w, 4.5);
+
+      for (let x = -32; x < w + 32; x += 64) {
+        ctx.strokeStyle = 'rgba(72, 56, 40, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + offset, y + rowH);
+        ctx.lineTo(x + offset + 32, y + 4);
+        ctx.lineTo(x + offset + 64, y + rowH);
+        ctx.stroke();
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 3);
+    tex.anisotropy = this.anisotropy;
+    this._palmBarkTex = tex;
     return tex;
   }
 
@@ -136,46 +216,14 @@ export class TextureManager {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0.0, 'rgba(255, 244, 222, 0.85)');
-    grad.addColorStop(0.35, 'rgba(245, 212, 162, 0.45)');
-    grad.addColorStop(0.7, 'rgba(232, 185, 124, 0.12)');
-    grad.addColorStop(1.0, 'rgba(232, 185, 124, 0.0)');
+    grad.addColorStop(0.0, 'rgba(255, 246, 228, 0.78)');
+    grad.addColorStop(0.38, 'rgba(244, 214, 168, 0.36)');
+    grad.addColorStop(0.72, 'rgba(232, 188, 130, 0.08)');
+    grad.addColorStop(1.0, 'rgba(232, 188, 130, 0.0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
     const tex = new THREE.CanvasTexture(canvas);
     this._dustTex = tex;
-    return tex;
-  }
-
-  createFootprintTexture() {
-    if (this._footTex) return this._footTex;
-    const w = 64;
-    const h = 128;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, w, h);
-
-    const drawOval = (cx, cy, rx, ry, alpha) => {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(rx, ry);
-      const grad = ctx.createRadialGradient(0, 0, 0.1, 0, 0, 1);
-      grad.addColorStop(0, `rgba(74, 46, 20, ${alpha})`);
-      grad.addColorStop(0.7, `rgba(92, 58, 26, ${alpha * 0.65})`);
-      grad.addColorStop(1, 'rgba(92, 58, 26, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(0, 0, 1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    };
-    drawOval(32, 42, 19, 32, 0.48);
-    drawOval(32, 92, 15, 22, 0.45);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    this._footTex = tex;
     return tex;
   }
 }

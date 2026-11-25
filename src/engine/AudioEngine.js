@@ -1,14 +1,14 @@
 /**
- * Procedural 4-Stage Desert Audio Engine — SARAB v5.0
- * Completely transforms the soundscape across every stage of the journey:
- *  - Stage 1 (Noon Plains): Open midday desert wind + high fine drifting sand hiss
- *  - Stage 2 (Afternoon Canyon): Hollow resonant canyon wall echo + soft periodic dust gusts
- *  - Stage 3 (Sunset Summit): High-altitude ridge wind rush + deep alpine-desert sub-rumble
- *  - Stage 4 (Starry Night): Calm cool night breeze + multi-voice procedural night crickets (صراصير الليل)
- *    that softly attenuate when entering the Abandoned House!
- * - Surface-dependent footsteps: 'sand' | 'sabkha' (crisp dry salt crust!) | 'rock' (canyon gravel!) | 'stone'
- * - Crisp tactile mechanical Flashlight toggle click (`playFlashlightClick`)
- * - Poetic desert dialogue blips & stage transition chords
+ * True 3D Spatial & Surround Procedural Audio Engine — SARAB v6.0
+ * - Syncs Web Audio `AudioListener` to player camera position & heading every tick!
+ * - True 3D world-positioned `PannerNode` emitters per stage (NO mono sounds stuck to your head!):
+ *   * Stage 1: Stereo open desert wind + spatialized distant soaring hawk cries + dry sabkha heat crackle
+ *   * Stage 2: Spatialized canyon wall echoes + 3D localized rustling Oasis Palm fronds + creaking ruins
+ *   * Stage 3: High-altitude stereo mountain wind sweep + deep valley resonance + distant summit sand-singing hum
+ *   * Stage 4: True 3D spatialized Night Crickets anchored in distant desert patches (pan smoothly left/right
+ *     and attenuate with distance & indoor walls!) + 3D warm oil-lantern fire crackle + distant desert owl hoots!
+ * - 4 surface-aware footsteps ('sand' | 'sabkha' | 'rock' | 'stone')
+ * - Rich story & interaction SFX: parchment rustle, brass clink, lantern ignition whoosh, oud discovery chord, flashlight click
  */
 export class AudioEngine {
   constructor() {
@@ -21,20 +21,25 @@ export class AudioEngine {
     this.indoorFactor = 0;
     this.stormIntensity = 0;
 
-    // Continuous ambient graph nodes
+    // Continuous ambient stereo beds
     this.windGain = null;
-    this.windFilterLow = null;
-    this.windFilterHigh = null;
+    this.windFilterL = null;
+    this.windFilterR = null;
     this.canyonResGain = null;
     this.canyonResFilter = null;
     this.summitRushGain = null;
     this.nightBreezeGain = null;
-    this.cricketBusGain = null;
+
+    // Dynamic 3D spatial PannerNodes for the active stage
+    this._spatialSpots = []; // { type, x, y, z }
+    this._spatialNodes = []; // active continuous WebAudio nodes to tear down on stage change
 
     this._noiseBuffer = null;
     this._blipCounter = 0;
     this._ambAccum = 0.2;
-    this._cricketTimer = 0.35;
+    this._listenerAccum = 0.1;
+    this._cricketTimer = 0.8;
+    this._wildlifeTimer = 6.5;
   }
 
   unlock() {
@@ -54,8 +59,13 @@ export class AudioEngine {
     this.masterGain.connect(this.ctx.destination);
 
     this._noiseBuffer = this._createNoiseBuffer(4.0);
-    this._setupStageAmbienceGraph();
+    this._setupStereoAmbienceGraph();
     this.unlocked = true;
+
+    // If stage emitters were registered before audio unlock, instantiate them now!
+    if (this._spatialSpots.length > 0) {
+      this._rebuildContinuousSpatialLoops();
+    }
 
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
@@ -69,9 +79,13 @@ export class AudioEngine {
     }
   }
 
-  setStage(stageId) {
+  setStage(stageId, spatialSpots = []) {
     this.stageId = stageId;
-    this._ambAccum = 1.0; // Force immediate target transition on next tick
+    this._spatialSpots = spatialSpots || [];
+    this._ambAccum = 1.0;
+    this._cricketTimer = 0.7;
+    this._wildlifeTimer = 4.5 + Math.random() * 4.0;
+    this._rebuildContinuousSpatialLoops();
   }
 
   setStormIntensity(val) {
@@ -107,236 +121,411 @@ export class AudioEngine {
     return buffer;
   }
 
-  _setupStageAmbienceGraph() {
+  _setupStereoAmbienceGraph() {
     const now = this.ctx.currentTime;
 
-    // 1. Base Open Desert Wind (Low air bed + high sand hiss)
+    // True Stereo Decorrelated Desert Wind Bed (independent L & R filtered pink noise -> wide enveloping soundstage!)
     this.windGain = this.ctx.createGain();
-    this.windGain.gain.value = 0.22;
+    this.windGain.gain.value = 0.18;
     this.windGain.connect(this.masterGain);
 
-    const src1 = this.ctx.createBufferSource();
-    src1.buffer = this._noiseBuffer;
-    src1.loop = true;
-    this.windFilterLow = this.ctx.createBiquadFilter();
-    this.windFilterLow.type = 'bandpass';
-    this.windFilterLow.frequency.value = 250;
-    this.windFilterLow.Q.value = 1.3;
-    const g1 = this.ctx.createGain();
-    g1.gain.value = 0.72;
-    src1.connect(this.windFilterLow);
-    this.windFilterLow.connect(g1);
-    g1.connect(this.windGain);
-    src1.start(now);
+    const makeChannel = (panVal, offsetSec, freq, lfoRate) => {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this._noiseBuffer;
+      src.loop = true;
+      const filt = this.ctx.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.value = freq;
+      filt.Q.value = 1.2;
+      const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+      if (pan) pan.pan.value = panVal;
 
-    const src2 = this.ctx.createBufferSource();
-    src2.buffer = this._noiseBuffer;
-    src2.loop = true;
-    this.windFilterHigh = this.ctx.createBiquadFilter();
-    this.windFilterHigh.type = 'bandpass';
-    this.windFilterHigh.frequency.value = 1550;
-    this.windFilterHigh.Q.value = 2.4;
-    const g2 = this.ctx.createGain();
-    g2.gain.value = 0.24;
-    src2.connect(this.windFilterHigh);
-    this.windFilterHigh.connect(g2);
-    g2.connect(this.windGain);
-    src2.start(now + 0.9);
+      const lfo = this.ctx.createOscillator();
+      lfo.frequency.value = lfoRate;
+      const lg = this.ctx.createGain();
+      lg.gain.value = 95;
+      lfo.connect(lg);
+      lg.connect(filt.frequency);
 
-    const lfo1 = this.ctx.createOscillator();
-    lfo1.frequency.value = 0.11;
-    const lfo1G = this.ctx.createGain();
-    lfo1G.gain.value = 95;
-    lfo1.connect(lfo1G);
-    lfo1G.connect(this.windFilterLow.frequency);
-    lfo1.start(now);
+      src.connect(filt);
+      if (pan) {
+        filt.connect(pan);
+        pan.connect(this.windGain);
+      } else {
+        filt.connect(this.windGain);
+      }
+      src.start(now + offsetSec);
+      lfo.start(now);
+      return filt;
+    };
 
-    // 2. Stage 2 Canyon Hollow Wind Formant Resonance
+    this.windFilterL = makeChannel(-0.68, 0.0, 240, 0.11);
+    this.windFilterR = makeChannel(0.68, 1.85, 290, 0.085);
+
+    // Stage 2 Canyon Wall Hollow Resonance (subtle stereo drift)
     const srcCanyon = this.ctx.createBufferSource();
     srcCanyon.buffer = this._noiseBuffer;
     srcCanyon.loop = true;
     this.canyonResFilter = this.ctx.createBiquadFilter();
     this.canyonResFilter.type = 'bandpass';
-    this.canyonResFilter.frequency.value = 370;
-    this.canyonResFilter.Q.value = 6.2; // Hollow echoing canyon walls!
+    this.canyonResFilter.frequency.value = 340;
+    this.canyonResFilter.Q.value = 5.4;
     this.canyonResGain = this.ctx.createGain();
     this.canyonResGain.gain.value = 0.0;
     srcCanyon.connect(this.canyonResFilter);
     this.canyonResFilter.connect(this.canyonResGain);
     this.canyonResGain.connect(this.masterGain);
-    srcCanyon.start(now + 1.7);
+    srcCanyon.start(now + 1.2);
 
-    // 3. Stage 3 High-Altitude Mountain Ridge Wind Rush
+    // Stage 3 Mountain Peak Airy Wind Sweep
     const srcSummit = this.ctx.createBufferSource();
     srcSummit.buffer = this._noiseBuffer;
     srcSummit.loop = true;
-    const summitFilter = this.ctx.createBiquadFilter();
-    summitFilter.type = 'bandpass';
-    summitFilter.frequency.value = 640;
-    summitFilter.Q.value = 1.65;
+    const sumFilt = this.ctx.createBiquadFilter();
+    sumFilt.type = 'bandpass';
+    sumFilt.frequency.value = 560;
+    sumFilt.Q.value = 1.5;
     this.summitRushGain = this.ctx.createGain();
     this.summitRushGain.gain.value = 0.0;
-    srcSummit.connect(summitFilter);
-    summitFilter.connect(this.summitRushGain);
+    srcSummit.connect(sumFilt);
+    sumFilt.connect(this.summitRushGain);
     this.summitRushGain.connect(this.masterGain);
-    srcSummit.start(now + 2.3);
+    srcSummit.start(now + 2.1);
 
-    const summitLfo = this.ctx.createOscillator();
-    summitLfo.frequency.value = 0.19;
-    const summitLfoG = this.ctx.createGain();
-    summitLfoG.gain.value = 260;
-    summitLfo.connect(summitLfoG);
-    summitLfoG.connect(summitFilter.frequency);
-    summitLfo.start(now);
+    const sumLfo = this.ctx.createOscillator();
+    sumLfo.frequency.value = 0.17;
+    const sumLfoG = this.ctx.createGain();
+    sumLfoG.gain.value = 220;
+    sumLfo.connect(sumLfoG);
+    sumLfoG.connect(sumFilt.frequency);
+    sumLfo.start(now);
 
-    // 4. Stage 4 Calm Cool Night Breeze + Crickets Bus
+    // Stage 4 Soft Cool Night Breeze Bed
     const srcNight = this.ctx.createBufferSource();
     srcNight.buffer = this._noiseBuffer;
     srcNight.loop = true;
-    const nightFilter = this.ctx.createBiquadFilter();
-    nightFilter.type = 'lowpass';
-    nightFilter.frequency.value = 390;
+    const nightFilt = this.ctx.createBiquadFilter();
+    nightFilt.type = 'lowpass';
+    nightFilt.frequency.value = 360;
     this.nightBreezeGain = this.ctx.createGain();
     this.nightBreezeGain.gain.value = 0.0;
-    srcNight.connect(nightFilter);
-    nightFilter.connect(this.nightBreezeGain);
+    srcNight.connect(nightFilt);
+    nightFilt.connect(this.nightBreezeGain);
     this.nightBreezeGain.connect(this.masterGain);
-    srcNight.start(now + 0.4);
+    srcNight.start(now + 0.5);
+  }
 
-    this.cricketBusGain = this.ctx.createGain();
-    this.cricketBusGain.gain.value = 0.0;
-    this.cricketBusGain.connect(this.masterGain);
+  _clearContinuousSpatialLoops() {
+    for (const item of this._spatialNodes) {
+      try {
+        item.src?.stop();
+        item.src?.disconnect();
+        item.panner?.disconnect();
+        item.gain?.disconnect();
+      } catch {}
+    }
+    this._spatialNodes.length = 0;
+  }
+
+  _createPannerAt(x, y, z, refDist = 6, maxDist = 75, rolloff = 1.45) {
+    const panner = this.ctx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = refDist;
+    panner.maxDistance = maxDist;
+    panner.rolloffFactor = rolloff;
+    panner.positionX ? panner.positionX.setValueAtTime(x, this.ctx.currentTime) : panner.setPosition(x, y, z);
+    if (panner.positionY) {
+      panner.positionY.setValueAtTime(y, this.ctx.currentTime);
+      panner.positionZ.setValueAtTime(z, this.ctx.currentTime);
+    }
+    return panner;
+  }
+
+  _rebuildContinuousSpatialLoops() {
+    this._clearContinuousSpatialLoops();
+    if (!this.unlocked || !this.ctx || !this._noiseBuffer) return;
+    const now = this.ctx.currentTime;
+
+    for (const s of this._spatialSpots) {
+      if (s.type === 'palms') {
+        // 3D localized rustling date-palm fronds in Stage 2 Oasis!
+        const src = this.ctx.createBufferSource();
+        src.buffer = this._noiseBuffer;
+        src.loop = true;
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.value = 1850;
+        filt.Q.value = 1.6;
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.22;
+        const panner = this._createPannerAt(s.x, s.y + 4.5, s.z, 5, 48, 1.5);
+        src.connect(filt);
+        filt.connect(gain);
+        gain.connect(panner);
+        panner.connect(this.masterGain);
+        src.start(now + Math.random() * 2);
+        this._spatialNodes.push({ src, panner, gain });
+      } else if (s.type === 'lantern' || s.type === 'campfire') {
+        // Warm 3D crackling oil-lantern / campfire embers!
+        const src = this.ctx.createBufferSource();
+        src.buffer = this._noiseBuffer;
+        src.loop = true;
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.value = s.type === 'campfire' ? 520 : 880;
+        filt.Q.value = 1.9;
+        const gain = this.ctx.createGain();
+        gain.gain.value = s.type === 'campfire' ? 0.14 : 0.08;
+        const panner = this._createPannerAt(s.x, s.y + 0.8, s.z, 2.5, 22, 1.8);
+        src.connect(filt);
+        filt.connect(gain);
+        gain.connect(panner);
+        panner.connect(this.masterGain);
+        src.start(now + Math.random() * 2);
+        this._spatialNodes.push({ src, panner, gain });
+      }
+    }
   }
 
   /**
-   * Synthesizes a single authentic desert night cricket chirp burst (3-4 crisp resonant pulses around 4.3-4.7 kHz).
+   * True 3D World-Anchored Desert Night Cricket Chirp!
+   * Anchored in distant desert patches around the dunes/rocks so turning your head pans them smoothly
+   * left/right, and walking away or stepping indoors naturally softens & distances them!
    */
-  _triggerNightCricket() {
-    if (!this.unlocked || !this.ctx || !this.cricketBusGain) return;
+  _triggerSpatialCricket() {
+    if (!this.unlocked || !this.ctx) return;
+    const patches = this._spatialSpots.filter((s) => s.type === 'cricket');
+    if (patches.length === 0) return;
+
+    const spot = patches[Math.floor(Math.random() * patches.length)];
     const now = this.ctx.currentTime;
-    const baseFreq = 4150 + Math.random() * 680;
+    const baseFreq = 3750 + Math.random() * 580; // Warmer, softer natural cricket fundamental
     const pulses = 3 + Math.floor(Math.random() * 2);
-    const pulseLen = 0.028;
-    const pulseGap = 0.044;
-    const peakAmp = 0.016 + Math.random() * 0.018;
+    const pulseGap = 0.056;
+    const peakAmp = 0.048 * (1.0 - this.indoorFactor * 0.72);
+    if (peakAmp < 0.004) return;
 
     const osc = this.ctx.createOscillator();
-    const osc2 = this.ctx.createOscillator();
-    const filter = this.ctx.createBiquadFilter();
-    const env = this.ctx.createGain();
-
     osc.type = 'sine';
     osc.frequency.value = baseFreq;
-    osc2.type = 'triangle';
-    osc2.frequency.value = baseFreq * 1.995; // Subtle insect overtone
 
-    filter.type = 'bandpass';
-    filter.frequency.value = baseFreq;
-    filter.Q.value = 5.0;
+    // Soft natural bandpass + warm rolloff so it sounds organic & distant, NEVER harsh clicks!
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = baseFreq;
+    filt.Q.value = 6.5;
 
+    const env = this.ctx.createGain();
     env.gain.setValueAtTime(0.0001, now);
     for (let i = 0; i < pulses; i++) {
       const t0 = now + i * pulseGap;
       env.gain.setValueAtTime(0.0001, t0);
-      env.gain.linearRampToValueAtTime(peakAmp, t0 + 0.006);
-      env.gain.exponentialRampToValueAtTime(0.0001, t0 + pulseLen);
+      env.gain.linearRampToValueAtTime(peakAmp, t0 + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.044);
     }
 
-    const totalDur = pulses * pulseGap + 0.04;
-    osc.connect(filter);
-    osc2.connect(filter);
-    filter.connect(env);
-    env.connect(this.cricketBusGain);
+    const panner = this._createPannerAt(
+      spot.x + (Math.random() - 0.5) * 6,
+      spot.y + 0.5,
+      spot.z + (Math.random() - 0.5) * 6,
+      8.0,
+      95.0,
+      1.35
+    );
 
+    osc.connect(filt);
+    filt.connect(env);
+    env.connect(panner);
+    panner.connect(this.masterGain);
+
+    const totalDur = pulses * pulseGap + 0.06;
     osc.start(now);
-    osc2.start(now);
     osc.stop(now + totalDur);
-    osc2.stop(now + totalDur);
   }
 
-  updateAmbience(dt, indoorFactor, elapsed) {
+  /**
+   * Atmospheric 3D Wildlife & Desert Environmental One-Shots:
+   * - Stage 1/2: Distant desert falcon/hawk cry soaring overhead in 3D space
+   * - Stage 3: Soft singing-sand low desert harmonic swell from the dune sea below
+   * - Stage 4: Soft distant desert owl hoot across the moonlit valley
+   */
+  _triggerSpatialWildlife(playerPos) {
+    if (!this.unlocked || !this.ctx || !playerPos) return;
+    const now = this.ctx.currentTime;
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 28 + Math.random() * 24;
+    const wx = playerPos.x + Math.cos(ang) * dist;
+    const wz = playerPos.z + Math.sin(ang) * dist;
+
+    if (this.stageId === 1 || this.stageId === 2) {
+      // Distant desert hawk cry overhead
+      const osc = this.ctx.createOscillator();
+      const filt = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(2150, now);
+      osc.frequency.exponentialRampToValueAtTime(1420, now + 0.75);
+      filt.type = 'bandpass';
+      filt.frequency.value = 1800;
+      filt.Q.value = 4.5;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.045, now + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.82);
+
+      const panner = this._createPannerAt(wx, playerPos.y + 24, wz, 14, 140, 1.1);
+      osc.connect(filt);
+      filt.connect(g);
+      g.connect(panner);
+      panner.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.88);
+    } else if (this.stageId === 3) {
+      // Eerie natural "singing dunes" warm resonant desert hum rising from the valley below!
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(104, now);
+      osc.frequency.linearRampToValueAtTime(110, now + 1.8);
+      osc.frequency.linearRampToValueAtTime(98, now + 3.6);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.042, now + 1.2);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 3.7);
+      const panner = this._createPannerAt(wx, playerPos.y - 25, wz, 18, 160, 1.0);
+      osc.connect(g);
+      g.connect(panner);
+      panner.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 3.8);
+    } else if (this.stageId === 4 && this.indoorFactor < 0.5) {
+      // Soft distant desert owl double-hoot in 3D night space
+      [0, 0.52].forEach((off, i) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(i === 0 ? 410 : 375, now + off);
+        osc.frequency.exponentialRampToValueAtTime(i === 0 ? 360 : 325, now + off + 0.36);
+        g.gain.setValueAtTime(0.0001, now + off);
+        g.gain.linearRampToValueAtTime(0.045, now + off + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + off + 0.42);
+        const panner = this._createPannerAt(wx, playerPos.y + 8, wz, 12, 120, 1.2);
+        osc.connect(g);
+        g.connect(panner);
+        panner.connect(this.masterGain);
+        osc.start(now + off);
+        osc.stop(now + off + 0.46);
+      });
+    }
+  }
+
+  /**
+   * Updates 3D AudioListener pose + stereo wind beds + spatialized wildlife/crickets!
+   */
+  updateAmbience(dt, indoorFactor, elapsed, camera = null, playerPos = null) {
     if (!this.unlocked || !this.ctx || !this.windGain || this.ctx.state !== 'running') return;
     this.indoorFactor += (indoorFactor - this.indoorFactor) * Math.min(1, dt * 4.5);
 
-    // Stage 4 Procedural Night Crickets scheduler (runs smoothly when outdoors or dimly indoors)
-    if (this.stageId === 4) {
-      this._cricketTimer -= dt;
-      if (this._cricketTimer <= 0) {
-        this._triggerNightCricket();
-        this._cricketTimer = 0.42 + Math.random() * 1.15;
+    // 1. Update 3D Web Audio Listener orientation & position at 15Hz
+    this._listenerAccum += dt;
+    if (camera && this._listenerAccum >= 0.066) {
+      this._listenerAccum = 0;
+      const listener = this.ctx.listener;
+      const now = this.ctx.currentTime;
+      const p = camera.position;
+      if (listener.positionX) {
+        listener.positionX.setValueAtTime(p.x, now);
+        listener.positionY.setValueAtTime(p.y, now);
+        listener.positionZ.setValueAtTime(p.z, now);
+      } else if (listener.setPosition) {
+        listener.setPosition(p.x, p.y, p.z);
+      }
+      // Forward vector from camera matrixWorld (-Z column)
+      const e = camera.matrixWorld.elements;
+      const fx = -e[8], fy = -e[9], fz = -e[10];
+      const ux = e[4], uy = e[5], uz = e[6];
+      if (listener.forwardX) {
+        listener.forwardX.setValueAtTime(fx, now);
+        listener.forwardY.setValueAtTime(fy, now);
+        listener.forwardZ.setValueAtTime(fz, now);
+        listener.upX.setValueAtTime(ux, now);
+        listener.upY.setValueAtTime(uy, now);
+        listener.upZ.setValueAtTime(uz, now);
+      } else if (listener.setOrientation) {
+        listener.setOrientation(fx, fy, fz, ux, uy, uz);
       }
     }
 
-    // Throttle Web Audio AudioParam updates to 8Hz for low CPU power
+    // 2. Stage 4 Spatialized Night Crickets (organic staggered intervals from 3D world patches!)
+    if (this.stageId === 4) {
+      this._cricketTimer -= dt;
+      if (this._cricketTimer <= 0) {
+        this._triggerSpatialCricket();
+        this._cricketTimer = 0.65 + Math.random() * 1.45;
+      }
+    }
+
+    // 3. Spatialized desert wildlife & ambient world calls
+    this._wildlifeTimer -= dt;
+    if (this._wildlifeTimer <= 0) {
+      this._triggerSpatialWildlife(playerPos);
+      this._wildlifeTimer = 9.0 + Math.random() * 10.0;
+    }
+
+    // 4. Stereo wind bed modulation at 8Hz
     this._ambAccum += dt;
     if (this._ambAccum < 0.125) return;
     this._ambAccum = 0;
 
     const now = this.ctx.currentTime;
     const storm = this.stormIntensity || 0;
-    const indoorAtten = 1.0 - this.indoorFactor * 0.62;
-    const gust = 0.85 + 0.2 * Math.sin(elapsed * 0.42) + 0.12 * Math.sin(elapsed * 1.05);
+    const indoorAtten = 1.0 - this.indoorFactor * 0.65;
+    const gust = 0.85 + 0.2 * Math.sin(elapsed * 0.39) + 0.12 * Math.sin(elapsed * 0.98);
 
     let dayWindVol = 0;
-    let lowFreq = 250;
-    let highFreq = 1520;
+    let freqL = 240;
+    let freqR = 290;
     let canyonVol = 0;
     let summitVol = 0;
     let nightBreezeVol = 0;
-    let cricketVol = 0;
 
     if (this.stageId === 1) {
-      // Stage 1: Open Noon Mirage Plains
-      dayWindVol = 0.23 * gust;
-      lowFreq = 240;
-      highFreq = 1650;
+      dayWindVol = 0.19 * gust;
+      freqL = 230;
+      freqR = 285;
     } else if (this.stageId === 2) {
-      // Stage 2: Rocky Canyon + Echoing Wind + Light Dust Gusts
-      dayWindVol = (0.20 + storm * 0.36) * gust;
-      lowFreq = 290 + storm * 140;
-      highFreq = 1480 + storm * 520;
-      canyonVol = (0.19 + storm * 0.18) * (0.78 + 0.22 * Math.sin(elapsed * 0.58));
-      this.canyonResFilter.frequency.setTargetAtTime(340 + Math.sin(elapsed * 0.33) * 85, now, 0.2);
+      dayWindVol = (0.17 + storm * 0.26) * gust;
+      freqL = 275 + storm * 110;
+      freqR = 335 + storm * 120;
+      canyonVol = (0.15 + storm * 0.14) * (0.8 + 0.2 * Math.sin(elapsed * 0.54));
+      this.canyonResFilter.frequency.setTargetAtTime(320 + Math.sin(elapsed * 0.3) * 75, now, 0.25);
     } else if (this.stageId === 3) {
-      // Stage 3: High Mountain Summit Wind Rush
-      dayWindVol = 0.18 * gust;
-      lowFreq = 310;
-      highFreq = 1850;
-      summitVol = 0.34 * (0.8 + 0.25 * Math.sin(elapsed * 0.65));
+      dayWindVol = 0.16 * gust;
+      freqL = 295;
+      freqR = 365;
+      summitVol = 0.28 * (0.82 + 0.2 * Math.sin(elapsed * 0.62));
     } else {
-      // Stage 4: Desert Night — Calm Night Breeze + Night Crickets!
-      dayWindVol = 0.025;
-      nightBreezeVol = 0.16 * (0.85 + 0.15 * Math.sin(elapsed * 0.28)) * indoorAtten;
-      cricketVol = 0.95 * (1.0 - this.indoorFactor * 0.72);
+      dayWindVol = 0.02;
+      nightBreezeVol = 0.14 * (0.86 + 0.14 * Math.sin(elapsed * 0.26)) * indoorAtten;
     }
 
     this.windGain.gain.setTargetAtTime(dayWindVol * indoorAtten, now, 0.22);
-    this.windFilterLow.frequency.setTargetAtTime(lowFreq * indoorAtten, now, 0.22);
-    this.windFilterHigh.frequency.setTargetAtTime(highFreq * (1 - this.indoorFactor * 0.55), now, 0.22);
+    this.windFilterL.frequency.setTargetAtTime(freqL * indoorAtten, now, 0.22);
+    this.windFilterR.frequency.setTargetAtTime(freqR * indoorAtten, now, 0.22);
     this.canyonResGain.gain.setTargetAtTime(canyonVol * indoorAtten, now, 0.25);
     this.summitRushGain.gain.setTargetAtTime(summitVol * indoorAtten, now, 0.25);
     this.nightBreezeGain.gain.setTargetAtTime(nightBreezeVol, now, 0.25);
-    this.cricketBusGain.gain.setTargetAtTime(cricketVol, now, 0.25);
   }
 
-  /**
-   * Surface-dependent realistic footsteps:
-   * - 'sand'   : Soft granular loose Arabian desert sand sink
-   * - 'sabkha' : Crisp dry brittle cracked salt-flat crust crunch
-   * - 'rock'   : Gritty rocky canyon floor & gravel scuff
-   * - 'stone'  : Firm echoing stone floor inside ruins & abandoned house
-   */
   playFootstep(surface = 'sand', isRunning = false) {
     if (!this.unlocked || !this.ctx || !this._noiseBuffer) return;
     const now = this.ctx.currentTime;
-
     const src = this.ctx.createBufferSource();
     src.buffer = this._noiseBuffer;
     const offset = Math.random() * 2.4;
 
     const filter = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
-    const amp = isRunning ? 0.22 : 0.15;
+    const amp = isRunning ? 0.21 : 0.14;
 
     if (surface === 'stone') {
       filter.type = 'bandpass';
@@ -357,11 +546,10 @@ export class AudioEngine {
       thud.start(now);
       thud.stop(now + 0.065);
     } else if (surface === 'sabkha') {
-      // Brittle dry salt-flat crackle + hollow dry earth tap
       filter.type = 'highpass';
       filter.frequency.value = 1850 + Math.random() * 480;
       gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(amp * 1.1, now + 0.012);
+      gain.gain.linearRampToValueAtTime(amp * 1.08, now + 0.012);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
 
       const crust = this.ctx.createOscillator();
@@ -369,39 +557,25 @@ export class AudioEngine {
       crust.type = 'triangle';
       crust.frequency.setValueAtTime(210 + Math.random() * 40, now);
       crust.frequency.exponentialRampToValueAtTime(75, now + 0.045);
-      crustG.gain.setValueAtTime(amp * 0.36, now);
+      crustG.gain.setValueAtTime(amp * 0.34, now);
       crustG.gain.exponentialRampToValueAtTime(0.001, now + 0.052);
       crust.connect(crustG);
       crustG.connect(this.masterGain);
       crust.start(now);
       crust.stop(now + 0.06);
     } else if (surface === 'rock') {
-      // Rocky wadi gravel scuff + hard boot sole contact
       filter.type = 'bandpass';
       filter.frequency.value = 1380 + Math.random() * 420;
       filter.Q.value = 1.45;
       gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(amp * 1.08, now + 0.014);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.125);
-
-      const grit = this.ctx.createOscillator();
-      const gritG = this.ctx.createGain();
-      grit.type = 'sine';
-      grit.frequency.setValueAtTime(145, now);
-      grit.frequency.exponentialRampToValueAtTime(58, now + 0.05);
-      gritG.gain.setValueAtTime(amp * 0.34, now);
-      gritG.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
-      grit.connect(gritG);
-      gritG.connect(this.masterGain);
-      grit.start(now);
-      grit.stop(now + 0.06);
+      gain.gain.linearRampToValueAtTime(amp * 1.05, now + 0.014);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
     } else {
-      // Soft loose Arabian desert sand sink
       filter.type = 'bandpass';
       filter.frequency.value = 920 + Math.random() * 320;
       filter.Q.value = 0.82;
       gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(amp * 0.96, now + 0.032);
+      gain.gain.linearRampToValueAtTime(amp * 0.94, now + 0.032);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.175);
     }
 
@@ -411,62 +585,106 @@ export class AudioEngine {
     src.start(now, offset, 0.21);
   }
 
-  /**
-   * Crisp tactile mechanical two-stage click sound for the handheld flashlight switch!
-   */
   playFlashlightClick(isOn = true) {
     if (!this.unlocked || !this.ctx) return;
     const now = this.ctx.currentTime;
-
-    // Stage 1: sharp spring contact snap
     const osc1 = this.ctx.createOscillator();
     const g1 = this.ctx.createGain();
     osc1.type = 'square';
     osc1.frequency.setValueAtTime(isOn ? 1450 : 1120, now);
     osc1.frequency.exponentialRampToValueAtTime(isOn ? 420 : 280, now + 0.022);
-    g1.gain.setValueAtTime(0.14, now);
+    g1.gain.setValueAtTime(0.13, now);
     g1.gain.exponentialRampToValueAtTime(0.001, now + 0.026);
     osc1.connect(g1);
     g1.connect(this.masterGain);
     osc1.start(now);
     osc1.stop(now + 0.03);
 
-    // Stage 2: metallic barrel detent pop 18ms later
     const t2 = now + 0.018;
     const osc2 = this.ctx.createOscillator();
     const g2 = this.ctx.createGain();
     osc2.type = 'triangle';
     osc2.frequency.setValueAtTime(isOn ? 2350 : 1680, t2);
     osc2.frequency.exponentialRampToValueAtTime(isOn ? 680 : 420, t2 + 0.03);
-    g2.gain.setValueAtTime(0.16, t2);
+    g2.gain.setValueAtTime(0.15, t2);
     g2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.036);
     osc2.connect(g2);
     g2.connect(this.masterGain);
     osc2.start(t2);
     osc2.stop(t2 + 0.04);
+  }
 
-    // Tiny filtered click transient burst
-    if (this._noiseBuffer) {
+  playDiscoverySFX(kind = 'paper') {
+    if (!this.unlocked || !this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    if (kind === 'paper' && this._noiseBuffer) {
       const n = this.ctx.createBufferSource();
       n.buffer = this._noiseBuffer;
       const hp = this.ctx.createBiquadFilter();
-      hp.type = 'bandpass';
-      hp.frequency.value = isOn ? 3200 : 2400;
-      hp.Q.value = 1.6;
-      const ng = this.ctx.createGain();
-      ng.gain.setValueAtTime(0.18, now);
-      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.028);
+      hp.type = 'highpass';
+      hp.frequency.value = 1900;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.15, now + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
       n.connect(hp);
-      hp.connect(ng);
-      ng.connect(this.masterGain);
-      n.start(now, 0.3, 0.035);
+      hp.connect(g);
+      g.connect(this.masterGain);
+      n.start(now, 0.4, 0.3);
+    } else if (kind === 'metal') {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1180, now);
+      osc.frequency.exponentialRampToValueAtTime(840, now + 0.22);
+      g.gain.setValueAtTime(0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(g);
+      g.connect(this.masterGain);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } else if (kind === 'flame' && this._noiseBuffer) {
+      const n = this.ctx.createBufferSource();
+      n.buffer = this._noiseBuffer;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(320, now);
+      bp.frequency.exponentialRampToValueAtTime(980, now + 0.45);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.18, now + 0.14);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.72);
+      n.connect(bp);
+      bp.connect(g);
+      g.connect(this.masterGain);
+      n.start(now, 0.2, 0.8);
     }
+
+    // Subtle Arabian Hijaz plucked oud harmonic accent
+    [293.7, 369.99, 440.0].forEach((f, idx) => {
+      const osc = this.ctx.createOscillator();
+      const filt = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now + idx * 0.09);
+      filt.type = 'lowpass';
+      filt.frequency.setValueAtTime(1400, now + idx * 0.09);
+      filt.frequency.exponentialRampToValueAtTime(420, now + idx * 0.09 + 0.9);
+      g.gain.setValueAtTime(0.001, now + idx * 0.09);
+      g.gain.linearRampToValueAtTime(0.055, now + idx * 0.09 + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.09 + 1.15);
+      osc.connect(filt);
+      filt.connect(g);
+      g.connect(this.masterGain);
+      osc.start(now + idx * 0.09);
+      osc.stop(now + idx * 0.09 + 1.2);
+    });
   }
 
   playTextBlip(style = 'thought', char = '') {
     if (!this.unlocked || !this.ctx) return;
     if (!char || /[\s،.؟!…—\-:]/.test(char)) return;
-
     this._blipCounter++;
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -485,7 +703,7 @@ export class AudioEngine {
     filter.Q.value = 1.1;
 
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.072, now + 0.004);
+    gain.gain.linearRampToValueAtTime(0.068, now + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.046);
 
     osc.connect(filter);
@@ -505,8 +723,6 @@ export class AudioEngine {
       4: [110.0, 164.8, 220.0, 261.6],
     };
     const freqs = chords[stageId] || chords[1];
-    const dur = 3.2;
-
     freqs.forEach((f, idx) => {
       const osc = this.ctx.createOscillator();
       const filter = this.ctx.createBiquadFilter();
@@ -516,32 +732,13 @@ export class AudioEngine {
       filter.type = 'lowpass';
       filter.frequency.setValueAtTime(idx === 0 ? 280 : 680, now);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(0.05 / (idx * 0.35 + 1), now + 0.55);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-
+      gain.gain.linearRampToValueAtTime(0.048 / (idx * 0.35 + 1), now + 0.55);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.1);
       osc.connect(filter);
       filter.connect(gain);
       gain.connect(this.masterGain);
       osc.start(now);
-      osc.stop(now + dur + 0.1);
-    });
-  }
-
-  playLanternWarmChime() {
-    if (!this.unlocked || !this.ctx) return;
-    const now = this.ctx.currentTime;
-    [293.7, 370.0, 440.0, 587.3].forEach((f, i) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(f, now + i * 0.14);
-      gain.gain.setValueAtTime(0.0001, now + i * 0.14);
-      gain.gain.linearRampToValueAtTime(0.065, now + i * 0.14 + 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 2.4);
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-      osc.start(now + i * 0.14);
-      osc.stop(now + i * 0.14 + 2.5);
+      osc.stop(now + 3.2);
     });
   }
 }

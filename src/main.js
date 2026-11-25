@@ -9,7 +9,7 @@ import { ModelManager } from './engine/ModelManager.js';
 import { AudioEngine } from './engine/AudioEngine.js';
 import { PhysicsWorld } from './engine/Physics.js';
 import { SkyLightingSystem } from './engine/SkyLighting.js';
-import { StageManager } from './world/StageManager.js';
+import { StageManager, STAGE_METADATA } from './world/StageManager.js';
 import { DustStormSystem } from './world/DustStorm.js';
 import { FlashlightSystem } from './gameplay/Flashlight.js';
 import { PlayerController } from './gameplay/PlayerController.js';
@@ -18,12 +18,14 @@ import { JourneyManager } from './gameplay/JourneyManager.js';
 import { UIManager } from './ui/UIManager.js';
 
 /**
- * سَـرَاب v5.0 (SARAB v5.0 — 4-Stage Desert Exploration Journey: Noon -> Afternoon -> Sunset -> Starry Night)
- * - 4 separate rich walking stages (50–100s each at realistic ~3.4 m/s walk speed) with black transition & full GPU disposal
- * - Nano Banana Arabian desert sand, rocky canyon floor & cracked sabkha textures + clean derived Sobel normalMaps
- * - Baked Lighting & Contact AO on terrain, cairns, cliffs, ruins & walls (keeps phones cool without lowering resolution!)
- * - Stage-aware procedural audio (Noon wind, echoing Canyon, Summit ridge rush, Night crickets & breeze, 4-surface footsteps, Flashlight click)
- * - Handheld Flashlight (F key & on-screen HUD button) for Starry Night Stage 4
+ * سَـرَاب v6.0 (SARAB v6.0 — «أثر القافلة المفقودة»)
+ * - Rich 4-Chapter Interactive Desert Mystery searching for your brother Salem across Noon -> Afternoon -> Sunset -> Moonlit Night
+ * - Natural bright silver-blue moonlit visibility at Night (even with flashlight OFF) + zero-stutter pre-warmed Flashlight (0ms toggle!)
+ * - TRUE 3D Physically-Occluded Sun Flare (never bleeds through cliffs, mountains, or buildings!)
+ * - Watertight sculpted desert sandstone boulders, grounded natural mesas, feathered Arabian date palms, seamless Stage 3 Dune Sea
+ * - True 3D Spatial Audio (PannerNode HRTF night crickets, oil-lantern crackle, palm rustle, soaring hawks, desert owls & oud discoveries)
+ * - Redesigned Arabian Cinematic Minimalist HUD (Live Rotating Compass Ribbon + RTL Objective Card & Progress Pips + Discovery Modal)
+ * - Defaults: Ultra quality, 2.8x sensitivity, 140% resolution scale, smooth 60 FPS optimization!
  */
 class SarabGame {
   constructor() {
@@ -56,9 +58,10 @@ class SarabGame {
     window.addEventListener('resize', () => this._onResize());
     this._onResize();
 
-    // Load Stage 1 for the live 3D Title Vista
+    // Load Stage 1 for the live 3D Title Vista & pre-compile shaders cleanly
     this.stages.loadStage(1);
     this.cutscenes.startTitleCamera();
+    this.renderer.compile(this.scene, this.camera);
     requestAnimationFrame((ts) => this._animate(ts));
   }
 
@@ -72,7 +75,7 @@ class SarabGame {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
-    this.renderer.shadowMap.enabled = !IS_MOBILE;
+    this.renderer.shadowMap.enabled = Boolean(this.settings.data.shadows);
     this.renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
@@ -103,7 +106,10 @@ class SarabGame {
       this.player,
       this.flashlight,
       this.dustStorm,
-      this.ui
+      this.ui,
+      this.renderer,
+      this.scene,
+      this.camera
     );
 
     this.flashlight.onToggle((isOn) => {
@@ -111,7 +117,10 @@ class SarabGame {
     });
 
     this.player.onBoundaryHit = () => {
-      this.journey.sayImmediate('التضاريس هنا وعرة... سأبقى على المسار الصحراوي.', this.journey.stageId === 4 ? 'night' : 'thought');
+      this.journey.sayImmediate(
+        'التضاريس هنا وعرة... سأبقى على مسار أثر القافلة.',
+        this.journey.stageId === 4 ? 'night' : 'thought'
+      );
     };
 
     this.ui.onStartGame = async () => {
@@ -135,11 +144,18 @@ class SarabGame {
       }
     };
 
+    this.ui.onDiscoveryToggle = (isOpen) => {
+      if (this.cutscenes.mode === 'gameplay' && !this.journey.transitioning) {
+        this.player.enabled = !isOpen && !this.paused;
+        if (isOpen) this.player.setAutoSprintLock(false);
+      }
+    };
+
     this.ui.onPauseToggle = (isPaused) => {
       this.paused = isPaused;
       this.audio.setSuspended(isPaused || this.tabHidden);
       if (this.cutscenes.mode === 'gameplay' && !this.journey.transitioning) {
-        this.player.enabled = !isPaused;
+        this.player.enabled = !isPaused && !this.ui.isDiscoveryOpen;
       }
     };
 
@@ -174,7 +190,8 @@ class SarabGame {
   _applyPixelRatio() {
     const data = this.settings.data;
     const preset = this.settings.getPreset();
-    const effectiveDpr = Math.max(0.7, Math.min(1.85, Math.min(window.devicePixelRatio || 1, preset.dprCap) * data.resolutionScale));
+    const baseDpr = Math.min(window.devicePixelRatio || 1, preset.dprCap);
+    const effectiveDpr = Math.max(0.75, Math.min(2.25, baseDpr * data.resolutionScale));
     this.renderer.setPixelRatio(effectiveDpr);
   }
 
@@ -205,13 +222,16 @@ class SarabGame {
     requestAnimationFrame((ts) => this._animate(ts));
 
     if (this.tabHidden) return;
-    if (this._renderedInitialFrame && (this.paused || this.ui.isModalOpen || this.ui.isGateActive())) {
+    if (
+      this._renderedInitialFrame &&
+      (this.paused || (this.ui.isModalOpen && !this.ui.isDiscoveryOpen) || this.ui.isGateActive())
+    ) {
       this._lastRenderMs = nowMs;
       return;
     }
 
-    const isMenu = this.cutscenes.mode === 'title';
-    const targetFps = isMenu ? 24 : this.settings.getEffectiveFpsCap();
+    const isMenuOrModal = this.cutscenes.mode === 'title' || this.ui.isDiscoveryOpen;
+    const targetFps = isMenuOrModal ? 24 : this.settings.getEffectiveFpsCap();
     const minFrameMs = 1000 / targetFps;
 
     if (this._lastRenderMs === 0) this._lastRenderMs = nowMs - minFrameMs;
@@ -226,9 +246,9 @@ class SarabGame {
     this.elapsed += dt;
 
     if (this.cutscenes.mode === 'gameplay') {
-      const activeTarget = this.stages.getActiveInteractable();
+      const activeTarget = this.journey.getActiveInteractable();
       this.player.update(dt, this.elapsed, activeTarget);
-      this.ui.updateInteractPrompt(this.player.focusedInteractable);
+      this.ui.updateInteractPrompt(this.ui.isDiscoveryOpen ? null : this.player.focusedInteractable);
     } else {
       this.cutscenes.update(dt, this.elapsed);
     }
@@ -243,15 +263,21 @@ class SarabGame {
       this.camera,
       activePos,
       indoor,
-      this.journey.stageId === 2 ? 0.65 : 0.0
+      this.journey.stageId === 2 ? 0.25 : 0.0
     );
     this.sky.setStormIntensity(stormVal);
     this.stages.setStormIntensity(stormVal);
     this.audio.setStormIntensity(stormVal);
 
     this.sky.update(dt, this.elapsed, this.camera, activePos, indoor);
-    this.stages.update(dt, this.elapsed, activePos, this.camera);
-    this.audio.updateAmbience(dt, indoor ? 1 : 0, this.elapsed);
+    this.stages.update(
+      dt,
+      this.elapsed,
+      activePos,
+      this.camera,
+      this.cutscenes.mode === 'gameplay' ? this.journey.getActiveTargetWorldPos() : null
+    );
+    this.audio.updateAmbience(dt, indoor ? 1 : 0, this.elapsed, this.camera, activePos);
     this.journey.update(dt, this.elapsed, this.cutscenes.mode === 'gameplay', activePos, this.player.yaw);
 
     this.renderer.render(this.scene, this.camera);
@@ -271,6 +297,7 @@ class SarabGame {
       loadStage: async (stageId) => {
         this.ui.dismissGateForDebug();
         this.ui.hideTitleScreen();
+        this.ui.closeDiscoveryModal(false);
         this.cutscenes.enterGameplay();
         this.ui.showHUD();
         await this.journey.transitionToStage(stageId, { immediate: true, showOverlay: false });
@@ -283,12 +310,57 @@ class SarabGame {
         this.player.enabled = true;
         this.player.setPose(x, z, yaw, pitch);
         this.flashlight.update(0.016, this.elapsed, true);
+        this.sky._occAccum = 1.0;
       },
+      setStep: (idx) => {
+        const meta = STAGE_METADATA[this.journey.stageId];
+        if (!meta) return;
+        this.journey.stepIndex = Math.max(0, Math.min(idx, meta.steps.length - 1));
+        const step = this.journey.getCurrentStep();
+        this.ui.updateStageHUD({
+          stageId: meta.id,
+          chapterLabel: meta.chapterTag,
+          timeLabel: meta.timeLabel,
+          sunIcon: this.sky.getAtmosphere().sunIcon,
+          objective: step ? step.objective : '',
+          stepIndex: this.journey.stepIndex,
+          totalSteps: meta.steps.length,
+        });
+      },
+      openCurrentClue: () => {
+        const inter = this.journey.getActiveInteractable();
+        if (inter) this.journey.handleInteract(inter);
+      },
+      closeClue: () => this.ui.closeDiscoveryModal(true),
       setFlashlight: (on) => {
         this.flashlight.setEnabled(Boolean(on), false);
         this.flashlight.update(0.016, this.elapsed, true);
         this.ui.setFlashlightUI(this.flashlight.enabled, this.journey.stageId === 4);
       },
+      measureFlashlightToggleMs: () => {
+        const prev = this.flashlight.enabled;
+        const t0 = performance.now();
+        this.flashlight.setEnabled(!prev, false);
+        this.flashlight.update(0.016, this.elapsed, true);
+        this.renderer.render(this.scene, this.camera);
+        const dtMs = performance.now() - t0;
+        this.ui.setFlashlightUI(this.flashlight.enabled, this.journey.stageId === 4);
+        return Number(dtMs.toFixed(2));
+      },
+      getSunOcclusion: () => {
+        this.sky._occAccum = 1.0;
+        this.sky.update(0.05, this.elapsed, this.camera, this.player.position, this.player.isInsideHouse);
+        const camDir = new THREE.Vector3();
+        this.camera.getWorldDirection(camDir);
+        return {
+          occluded: this.sky._sunOccluded,
+          sunVisibility: Number(this.sky.sunVisibility.toFixed(3)),
+          glareAmount: Number(this.sky.glareAmount.toFixed(3)),
+          sunDot: Number(camDir.dot(this.sky.sunDirection).toFixed(3)),
+          occluderCount: this.sky._occluderMeshes.length,
+        };
+      },
+      getDefaults: () => ({ ...this.settings.data }),
       setStorm: (val) => {
         this.dustStorm.setTargetIntensity(val, true);
         this.sky.setStormIntensity(val, true);
@@ -296,7 +368,6 @@ class SarabGame {
       },
       triggerSubtitle: (text, style = 'thought') => this.journey.sayImmediate(text, style),
       testCollision: () => {
-        // Test cylinder cairns & ellipse rocks & mesas & house walls in current stage
         const radius = 0.36;
         let maxPen = 0;
         let checks = 0;
@@ -326,6 +397,7 @@ class SarabGame {
       },
       getStats: () => ({
         stageId: this.journey.stageId,
+        stepIndex: this.journey.stepIndex,
         walkSpeed: this.player.walkSpeed,
         surface: this.player.currentSurface,
         flashlightOn: this.flashlight.enabled,
@@ -334,7 +406,8 @@ class SarabGame {
         geometriesInMemory: this.renderer.info.memory.geometries,
         texturesInMemory: this.renderer.info.memory.textures,
         shadowUpdates: this.sky.shadowUpdatesCount,
-        skyCacheActive: this.sky.proceduralSky.useCache,
+        spatialSpots: this.stages.spatialAudioSpots.length,
+        sunOccluders: this.stages.sunOccluders.length,
         pos: this.player.position.toArray().map((n) => Number(n.toFixed(2))),
         indoor: this.player.isInsideHouse,
         modelsLoaded: Array.from(this.modelManager.geometries.keys()),

@@ -8,34 +8,36 @@ export function toArabicDigits(input) {
 }
 
 /**
- * 4-Stage Desert Exploration Journey Director — SARAB v5.0
- * Completely replaces the old story!
- * - Smooth black screen cinematic transitions between the 4 stages while disposing previous stage memory
- * - Poetic atmospheric desert subtitles triggered along each 50-100s walk
- * - Live compass arrow + distance to next pass/summit/house + Stage 4 sanctuary completion
+ * Interactive 4-Chapter Desert Mystery Story Engine — SARAB v6.0 («أثر القافلة المفقودة»)
+ * - Rich meaningful story across all 4 stages searching for your brother Salem!
+ * - Interactive clue discoveries in EVERY stage (NOT just walking forward!)
+ * - Smooth black screen transitions with full GPU stage disposal AND shader pre-compilation (zero hitch!)
+ * - Drives the brand-new Compass Ribbon HUD + Chapter Progress Pips!
  */
 export class JourneyManager {
-  constructor(audio, stageManager, player, flashlight, dustStorm, ui) {
+  constructor(audio, stageManager, player, flashlight, dustStorm, ui, renderer, scene, camera) {
     this.audio = audio;
     this.stages = stageManager;
     this.player = player;
     this.flashlight = flashlight;
     this.dustStorm = dustStorm;
     this.ui = ui;
+    this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
 
     this.stageId = 1;
+    this.stepIndex = 0;
     this.transitioning = false;
     this.journeyComplete = false;
     this.freeRoam = false;
-    this._triggeredWhispers = new Set();
 
-    // Subtitle typewriter state
     this.queue = [];
     this.activeLine = null;
     this.charIndex = 0;
     this.charTimer = 0;
     this.holdTimer = 0;
-    this.charInterval = 0.04;
+    this.charInterval = 0.038;
     this._hudAccum = 0.2;
 
     this.subContainer = document.getElementById('subtitle-container');
@@ -46,10 +48,31 @@ export class JourneyManager {
     this.transSubEl = document.getElementById('trans-stage-sub');
   }
 
-  /**
-   * Transitions to target stage (1..4) with a cinematic black screen fade,
-   * full disposal of the previous stage from memory, and audio/flashlight state sync.
-   */
+  getCurrentStep() {
+    const meta = STAGE_METADATA[this.stageId];
+    if (!meta || !meta.steps) return null;
+    if (this.stepIndex >= meta.steps.length) return null;
+    return meta.steps[this.stepIndex];
+  }
+
+  getActiveInteractable() {
+    const step = this.getCurrentStep();
+    if (!step || step.isExit) return null;
+    return this.stages.getInteractableById(step.id);
+  }
+
+  getActiveTargetWorldPos() {
+    const meta = STAGE_METADATA[this.stageId];
+    const step = this.getCurrentStep();
+    if (!meta || !step) return null;
+    if (step.isExit) {
+      const gy = this.stages.getHeight(meta.goalPos.x, meta.goalPos.z);
+      return { x: meta.goalPos.x, y: gy + 1.6, z: meta.goalPos.z };
+    }
+    const inter = this.stages.getInteractableById(step.id);
+    return inter ? inter.worldPos : null;
+  }
+
   async transitionToStage(targetStageId, { immediate = false, showOverlay = true } = {}) {
     if (this.transitioning && !immediate) return;
     this.transitioning = true;
@@ -63,46 +86,55 @@ export class JourneyManager {
     const atmos = STAGE_ATMOSPHERES[targetStageId] || STAGE_ATMOSPHERES[1];
 
     if (showOverlay && !immediate && this.transEl) {
-      if (this.transTagEl) this.transTagEl.textContent = `المرحلة ${toArabicDigits(meta.id)} من ٤ • ${meta.timeLabel}`;
+      if (this.transTagEl) this.transTagEl.textContent = `${meta.chapterTag} • ${meta.timeLabel}`;
       if (this.transTitleEl) this.transTitleEl.textContent = meta.title;
       if (this.transSubEl) this.transSubEl.textContent = meta.subtitle;
       this.transEl.classList.remove('hidden');
-      // Trigger smooth CSS fade to black
       requestAnimationFrame(() => this.transEl.classList.add('active'));
-      await new Promise((r) => setTimeout(r, 680));
+      await new Promise((r) => setTimeout(r, 620));
     }
 
-    // Unload previous stage from GPU/CPU memory and build the new stage cleanly!
+    // 1. Completely dispose previous stage & construct new stage
     this.stageId = meta.id;
+    this.stepIndex = 0;
     this.journeyComplete = false;
-    this._triggeredWhispers.clear();
     this.stages.loadStage(meta.id);
 
-    // Sync audio ambience & transition chord
-    this.audio.setStage(meta.id);
+    // 2. Sync 3D spatial soundscape spots for the new stage
+    this.audio.setStage(meta.id, this.stages.spatialAudioSpots);
     if (!immediate) this.audio.playStageTransition(meta.id);
 
-    // Sync Stage 2 light canyon dust gusts (0 in Stages 1, 3, 4)
+    // 3. Sync gentle desert breeze intensity
     this.dustStorm.setTargetIntensity(atmos.stormBase || 0.0, true);
 
-    // Sync Handheld Flashlight: automatically ON for Night Stage 4, OFF for bright daylight stages
+    // 4. Sync Handheld Flashlight (pre-warmed zero-stutter intensities!)
     this.flashlight.setStageContext(meta.id);
     this.flashlight.setEnabled(meta.id === 4, false);
     this.ui.setFlashlightUI(meta.id === 4, meta.id === 4);
 
-    // Place explorer cleanly at stage start pose
+    // 5. Place player at start pose & pre-compile ALL stage shaders while screen is black -> ZERO mid-game stutters!
     this.player.setPose(meta.startPos.x, meta.startPos.z, meta.startPos.yaw, meta.startPos.pitch);
     this.flashlight.update(0.016, 0, true);
+    if (this.renderer && this.scene && this.camera) {
+      this.renderer.compile(this.scene, this.camera);
+    }
 
-    // Update HUD mission & clock immediately
-    this.ui.updateMission(meta.objective, '', 0);
-    this.ui.updateClock(meta.timeLabel, meta.id, atmos.sunIcon);
+    // 6. Sync new Compass HUD & Chapter Progress Pips
+    const step = this.getCurrentStep();
+    this.ui.updateStageHUD({
+      stageId: meta.id,
+      chapterLabel: meta.chapterTag,
+      timeLabel: meta.timeLabel,
+      sunIcon: atmos.sunIcon,
+      objective: step ? step.objective : '',
+      stepIndex: this.stepIndex,
+      totalSteps: meta.steps.length,
+    });
 
     if (showOverlay && !immediate && this.transEl) {
-      // Let the player take in the black stage title card briefly
-      await new Promise((r) => setTimeout(r, 1150));
+      await new Promise((r) => setTimeout(r, 1100));
       this.transEl.classList.remove('active');
-      await new Promise((r) => setTimeout(r, 620));
+      await new Promise((r) => setTimeout(r, 580));
       this.transEl.classList.add('hidden');
     } else if (this.transEl) {
       this.transEl.classList.remove('active');
@@ -111,6 +143,57 @@ export class JourneyManager {
 
     this.transitioning = false;
     this.player.enabled = true;
+
+    if (!immediate) {
+      const intros = {
+        1: 'شمس الظهيرة حارقة... هناك معسكر مهجور غرب هذه الكثبان، ربما ترك أخي سالم أثراً فيه.',
+        2: 'دخلتُ وادي الصخور... أطلال الخان القديم أمامي، سأبحث فيها عن إشارة من سالم.',
+        3: 'هواء الجبل بارد والشمس تغيب... سأتفقد مأوى الراصد في منتصف الصعود أولاً.',
+        4: 'تتلألأ النجوم والمجرة فوق البيت المهجور... نور الفانوس يدلّني، سأتقدم بحذر.',
+      };
+      this.sayImmediate(intros[meta.id] || '', meta.id === 4 ? 'night' : 'thought');
+    }
+  }
+
+  handleInteract(interactable) {
+    const step = this.getCurrentStep();
+    if (!interactable || !step || step.isExit || interactable.id !== step.id) return;
+
+    this.audio.playDiscoverySFX(step.sfx || 'paper');
+
+    this.ui.openDiscoveryModal(step.tag, step.title, step.body, () => {
+      if (step.whisper) {
+        this.sayImmediate(step.whisper, this.stageId === 4 ? 'night' : 'thought');
+      }
+      this.stepIndex++;
+      const meta = STAGE_METADATA[this.stageId];
+      const atmos = STAGE_ATMOSPHERES[this.stageId];
+      const nextStep = this.getCurrentStep();
+
+      this.ui.updateStageHUD({
+        stageId: meta.id,
+        chapterLabel: meta.chapterTag,
+        timeLabel: meta.timeLabel,
+        sunIcon: atmos.sunIcon,
+        objective: nextStep ? nextStep.objective : 'اكتملت الرحلة — تجول بحرية تحت النجوم',
+        stepIndex: this.stepIndex,
+        totalSteps: meta.steps.length,
+      });
+
+      if (step.triggersNextStage && this.stageId < 4) {
+        setTimeout(() => {
+          this.transitionToStage(this.stageId + 1, { immediate: false, showOverlay: true });
+        }, 1600);
+      } else if (step.completesJourney) {
+        this.journeyComplete = true;
+        setTimeout(() => {
+          if (this.stageId === 4 && !this.freeRoam) {
+            this.player.enabled = false;
+            this.ui.showEndingScreen();
+          }
+        }, 2400);
+      }
+    });
   }
 
   sayImmediate(text, style = 'thought') {
@@ -146,69 +229,43 @@ export class JourneyManager {
     if (this.subText) this.subText.classList.remove('typing');
   }
 
-  handleInteract(interactable) {
-    if (!interactable || this.stageId !== 4) return;
-    if (interactable.id === 'sanctuary_lantern' && !this.journeyComplete) {
-      this.journeyComplete = true;
-      this.audio.playLanternWarmChime();
-      this.player.enabled = false;
-      this.sayImmediate('دفء المصباح يبدد وحشة الصحراء... اكتملت رحلة السراب تحت سماء النجوم.', 'night');
-      setTimeout(() => {
-        if (this.stageId === 4 && !this.freeRoam) {
-          this.ui.showEndingScreen();
-        }
-      }, 2800);
-    }
-  }
-
   update(dt, elapsed, isGameplay, playerPos, playerYaw = 0) {
     const meta = STAGE_METADATA[this.stageId];
+    const step = this.getCurrentStep();
 
-    // Stage 2 periodic light dust gusts (هبّة غبار خفيفة — stays subtle & cinematic 0.16..0.38!)
+    // Gentle Stage 2 canyon warm dust breeze wave (no harsh streak lines!)
     if (this.stageId === 2 && !this.transitioning) {
-      const gustWave = 0.24 + 0.12 * Math.sin(elapsed * 0.22) + 0.05 * Math.cos(elapsed * 0.51);
-      this.dustStorm.setTargetIntensity(Math.max(0.14, Math.min(0.40, gustWave)), false);
+      const gustWave = 0.16 + 0.08 * Math.sin(elapsed * 0.24);
+      this.dustStorm.setTargetIntensity(Math.max(0.10, Math.min(0.28, gustWave)), false);
     }
 
-    // Trigger poetic landmark whispers as explorer walks along each stage
-    if (isGameplay && !this.transitioning && meta && playerPos) {
-      for (let i = 0; i < meta.whispers.length; i++) {
-        const w = meta.whispers[i];
-        const key = `${this.stageId}_${i}`;
-        if (!this._triggeredWhispers.has(key) && playerPos.z <= w.distZ) {
-          this._triggeredWhispers.add(key);
-          this.enqueueLine(w.text, this.stageId === 4 ? 'night' : 'thought');
-        }
-      }
-
-      // Check stage exit arrival (Stages 1 -> 2 -> 3 -> 4)
-      if (this.stageId < 4) {
-        const distToGoal = Math.hypot(playerPos.x - meta.goalPos.x, playerPos.z - meta.goalPos.z);
-        if (distToGoal <= meta.goalRadius) {
-          this.transitionToStage(this.stageId + 1, { immediate: false, showOverlay: true });
-          return;
-        }
+    // Check stage exit gate arrival ONLY once stage clues are done (step.isExit === true)!
+    if (isGameplay && !this.transitioning && meta && step && step.isExit && playerPos) {
+      const distToGoal = Math.hypot(playerPos.x - meta.goalPos.x, playerPos.z - meta.goalPos.z);
+      if (distToGoal <= meta.goalRadius && this.stageId < 4) {
+        this.transitionToStage(this.stageId + 1, { immediate: false, showOverlay: true });
+        return;
       }
     }
 
-    // Throttled 10Hz HUD directional compass + distance update
+    // Throttled 12Hz Compass Ribbon + Objective Distance HUD update
     this._hudAccum += dt;
-    if (this._hudAccum >= 0.1) {
+    if (this._hudAccum >= 0.083) {
       this._hudAccum = 0;
-      if (isGameplay && meta && playerPos) {
-        const dx = meta.goalPos.x - playerPos.x;
-        const dz = meta.goalPos.z - playerPos.z;
-        const distMeters = Math.max(1, Math.round(Math.hypot(dx, dz)));
-        const targetAngle = Math.atan2(-dx, -dz);
-        let relRad = playerYaw - targetAngle;
-        while (relRad > Math.PI) relRad -= Math.PI * 2;
-        while (relRad < -Math.PI) relRad += Math.PI * 2;
-        const arrowDeg = Math.round((relRad * 180) / Math.PI);
-        const objText =
-          this.stageId === 4 && this.journeyComplete
-            ? 'تجول بحرية تحت سماء النجوم والبيت المهجور'
-            : meta.objective;
-        this.ui.updateMission(objText, this.journeyComplete ? '' : `${toArabicDigits(distMeters)}م`, this.journeyComplete ? null : arrowDeg);
+      if (isGameplay && playerPos) {
+        const targetPos = this.getActiveTargetWorldPos();
+        if (targetPos && !this.journeyComplete) {
+          const dx = targetPos.x - playerPos.x;
+          const dz = targetPos.z - playerPos.z;
+          const distMeters = Math.max(1, Math.round(Math.hypot(dx, dz)));
+          const targetAngle = Math.atan2(-dx, -dz);
+          let relRad = playerYaw - targetAngle;
+          while (relRad > Math.PI) relRad -= Math.PI * 2;
+          while (relRad < -Math.PI) relRad += Math.PI * 2;
+          this.ui.updateCompass(playerYaw, relRad, `${toArabicDigits(distMeters)}م`);
+        } else {
+          this.ui.updateCompass(playerYaw, null, '');
+        }
       }
     }
 
@@ -229,7 +286,7 @@ export class JourneyManager {
       } else {
         if (this.subText) this.subText.classList.remove('typing');
         this.holdTimer += dt;
-        const holdDur = Math.max(2.6, full.length * 0.045);
+        const holdDur = Math.max(2.6, full.length * 0.044);
         if (this.holdTimer >= holdDur) this._startNextLine();
       }
     }

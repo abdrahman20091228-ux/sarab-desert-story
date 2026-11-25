@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 
 /**
- * Handheld Desert Flashlight System — SARAB v5.0 (Night Stage 4 + Manual Toggle)
- * - Realistic SpotLight cone with soft penumbra + subtle close-range bounce fill
- * - Lightweight 1-draw-call additive fresnel volumetric beam cone (visible in night desert air!)
- * - Subtle organic hand-sway lag following the first-person camera
- * - Toggleable via on-screen HUD button (#btn-flashlight) and keyboard `F` key with tactile click SFX
+ * Zero-Stutter Handheld Desert Flashlight — SARAB v6.0
+ * - CRITICAL FIX: `spotLight.visible` and `spillLight.visible` remain ALWAYS TRUE!
+ *   Toggling changes ONLY `intensity` (0 <-> peak) so Three.js NEVER recompiles shaders
+ *   on toggle -> 0.0ms instant response, ZERO 1-second freeze on mobile!
  */
 export class FlashlightSystem {
   constructor(scene, camera, audio) {
@@ -16,26 +15,25 @@ export class FlashlightSystem {
     this.enabled = false;
     this.nightStrength = 1.0;
 
-    // Main handheld LED spotlight
-    this.spotLight = new THREE.SpotLight(0xfff1d6, 0.0, 62.0, Math.PI * 0.21, 0.56, 1.35);
-    this.spotLight.castShadow = false; // Zero shadow-map overhead -> keeps mobile phones cool!
-    this.spotLight.visible = false;
+    // ALWAYS visible = true so shader program light count NEVER changes on toggle!
+    this.spotLight = new THREE.SpotLight(0xfff2d8, 0.0, 74.0, Math.PI * 0.24, 0.56, 1.32);
+    this.spotLight.castShadow = false;
+    this.spotLight.visible = true;
     this.scene.add(this.spotLight);
     this.scene.add(this.spotLight.target);
 
-    // Subtle soft close spill light so the ground right at player's feet and room corners read naturally
-    this.spillLight = new THREE.PointLight(0xffe6bd, 0.0, 9.5, 1.8);
-    this.spillLight.visible = false;
+    this.spillLight = new THREE.PointLight(0xffe8c4, 0.0, 10.5, 1.75);
+    this.spillLight.visible = true;
     this.scene.add(this.spillLight);
 
-    // Ultra-lightweight volumetric beam cone (1 draw call, additive fresnel fade)
-    const coneLen = 14.0;
-    const coneGeo = new THREE.CylinderGeometry(0.08, 3.1, coneLen, 16, 1, true);
+    // Subtle additive volumetric beam cone (visible only when flashlight ON at dusk/night)
+    const coneLen = 13.0;
+    const coneGeo = new THREE.CylinderGeometry(0.07, 2.9, coneLen, 14, 1, true);
     coneGeo.translate(0, -coneLen * 0.5, 0);
     coneGeo.rotateX(Math.PI / 2);
 
     this.coneUniforms = {
-      uColor: { value: new THREE.Color('#ffe9c2') },
+      uColor: { value: new THREE.Color('#ffebc8') },
       uOpacity: { value: 0.0 },
     };
     const coneMat = new THREE.ShaderMaterial({
@@ -63,9 +61,8 @@ export class FlashlightSystem {
         varying vec3 vNormalV;
         varying vec3 vViewDir;
         void main() {
-          float fresnel = pow(abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.9);
-          // Fade softly near handheld emitter (vUv.y -> 1) and far end (vUv.y -> 0)
-          float lengthFade = smoothstep(0.0, 0.55, vUv.y) * smoothstep(1.0, 0.86, vUv.y);
+          float fresnel = pow(abs(dot(normalize(vNormalV), normalize(vViewDir))), 2.0);
+          float lengthFade = smoothstep(0.0, 0.55, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
           float alpha = fresnel * lengthFade * uOpacity;
           if (alpha < 0.003) discard;
           gl_FragColor = vec4(uColor, alpha);
@@ -75,7 +72,8 @@ export class FlashlightSystem {
 
     this.beamMesh = new THREE.Mesh(coneGeo, coneMat);
     this.beamMesh.frustumCulled = false;
-    this.beamMesh.visible = false;
+    this.beamMesh.visible = true;
+    this.beamMesh.scale.setScalar(0.0001);
     this.beamMesh.renderOrder = 7;
     this.scene.add(this.beamMesh);
 
@@ -92,8 +90,7 @@ export class FlashlightSystem {
   }
 
   setStageContext(stageId) {
-    // Full beam brilliance at Night (Stage 4), subtle warm beam at Sunset (Stage 3), mild during Day
-    this.nightStrength = stageId === 4 ? 1.0 : stageId === 3 ? 0.55 : 0.25;
+    this.nightStrength = stageId === 4 ? 1.0 : stageId === 3 ? 0.52 : 0.24;
     this._syncLightPower();
   }
 
@@ -117,21 +114,19 @@ export class FlashlightSystem {
   }
 
   _syncLightPower() {
+    // NEVER flip light.visible OR beamMesh.visible! Modulate intensity & scale only -> ZERO shader recompile stutter even on 1st click!
     const active = this.enabled;
-    this.spotLight.visible = active;
-    this.spillLight.visible = active;
-    this.beamMesh.visible = active && this.nightStrength > 0.4;
+    const showBeam = active && this.nightStrength > 0.4;
+    this.beamMesh.scale.setScalar(showBeam ? 1.0 : 0.0001);
 
     if (active) {
       this.spotLight.intensity = 28.0 * this.nightStrength;
-      this.spotLight.distance = 72.0;
-      this.spotLight.angle = Math.PI * 0.24;
       this.spillLight.intensity = 2.1 * this.nightStrength;
-      this.coneUniforms.uOpacity.value = 0.11 * this.nightStrength;
+      this.coneUniforms.uOpacity.value = showBeam ? 0.095 * this.nightStrength : 0.0;
     } else {
-      this.spotLight.intensity = 0;
-      this.spillLight.intensity = 0;
-      this.coneUniforms.uOpacity.value = 0;
+      this.spotLight.intensity = 0.0;
+      this.spillLight.intensity = 0.0;
+      this.coneUniforms.uOpacity.value = 0.0;
     }
   }
 
@@ -142,21 +137,19 @@ export class FlashlightSystem {
     this._camRight.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     this._camUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
 
-    // Smooth natural handheld lag
     if (snap) {
       this._smoothDir.copy(this._camDir);
     } else {
-      this._smoothDir.lerp(this._camDir, Math.min(1, dt * 15.0)).normalize();
+      this._smoothDir.lerp(this._camDir, Math.min(1, dt * 16.0)).normalize();
     }
 
-    const swayX = Math.sin(elapsed * 2.1) * 0.014;
-    const swayY = Math.cos(elapsed * 1.7) * 0.012;
+    const swayX = Math.sin(elapsed * 2.0) * 0.012;
+    const swayY = Math.cos(elapsed * 1.6) * 0.010;
 
-    // Held slightly right & below eye height (natural right-hand torch hold)
     this.spotLight.position
       .copy(this.camera.position)
       .addScaledVector(this._camRight, 0.24 + swayX)
-      .addScaledVector(this._camUp, -0.22 + swayY)
+      .addScaledVector(this._camUp, -0.20 + swayY)
       .addScaledVector(this._smoothDir, 0.14);
 
     this._targetPos.copy(this.spotLight.position).addScaledVector(this._smoothDir, 12.0);
@@ -165,7 +158,9 @@ export class FlashlightSystem {
 
     this.spillLight.position.copy(this.spotLight.position).addScaledVector(this._smoothDir, 0.9);
 
-    this.beamMesh.position.copy(this.spotLight.position);
-    this.beamMesh.lookAt(this._targetPos);
+    if (this.beamMesh.visible) {
+      this.beamMesh.position.copy(this.spotLight.position);
+      this.beamMesh.lookAt(this._targetPos);
+    }
   }
 }

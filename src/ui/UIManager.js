@@ -1,9 +1,40 @@
 /**
- * SARAB v5.0 UI Manager:
- * - Mandatory Fullscreen Gate, Title Screen, Ultra-Clean Single-Objective HUD
- * - On-Screen Flashlight Toggle Button (highlighted at Night Stage 4) + Stage Selector
- * - Settings Modal, Controls Guide, Ending Screen, and Orientation Hints
+ * SARAB v6.0 UI Manager — Arabian Cinematic Minimalist HUD & Story Interface:
+ * - Live Rotating Architectural Compass Ribbon (ش / ق / ج / غ) + Moving Waypoint Diamond & Distance
+ * - Top-Right Borderless RTL Objective Card with Chapter Progress Pips
+ * - Interactive Story Clue Discovery Modal (opens on every landmark inspection across all 4 stages)
+ * - Zero-blur live HUD (keeps mobile locked at smooth 60 FPS!)
+ * - Settings & Chapters Drawer synced with v6.0 defaults (Ultra, 2.8x sensitivity, 140% resolution scale)
  */
+
+const COMPASS_PX_PER_DEG = 2.15; // 1° = 2.15px -> ~160° visible across a ~344px ribbon
+const COMPASS_TICKS = [
+  { deg: 0, label: 'ش', major: true, cardinal: true },
+  { deg: 15 },
+  { deg: 30 },
+  { deg: 45, label: 'ش.ق', major: true },
+  { deg: 60 },
+  { deg: 75 },
+  { deg: 90, label: 'ق', major: true, cardinal: true },
+  { deg: 105 },
+  { deg: 120 },
+  { deg: 135, label: 'ج.ق', major: true },
+  { deg: 150 },
+  { deg: 165 },
+  { deg: 180, label: 'ج', major: true, cardinal: true },
+  { deg: 195 },
+  { deg: 210 },
+  { deg: 225, label: 'ج.غ', major: true },
+  { deg: 240 },
+  { deg: 255 },
+  { deg: 270, label: 'غ', major: true, cardinal: true },
+  { deg: 285 },
+  { deg: 300 },
+  { deg: 315, label: 'ش.غ', major: true },
+  { deg: 330 },
+  { deg: 345 },
+];
+
 export class UIManager {
   constructor(settings, audio) {
     this.settings = settings;
@@ -14,16 +45,32 @@ export class UIManager {
     this.hudLayer = document.getElementById('hud-layer');
     this.settingsModal = document.getElementById('settings-modal');
     this.controlsModal = document.getElementById('controls-modal');
+    this.discoveryModal = document.getElementById('discovery-modal');
     this.endingScreen = document.getElementById('ending-screen');
     this.portraitWarning = document.getElementById('portrait-warning');
 
-    this.missionTextEl = document.getElementById('hud-mission-text');
-    this.missionDistEl = document.getElementById('hud-mission-dist');
-    this.missionArrowEl = document.getElementById('hud-mission-arrow');
+    // v6.0 Compass Ribbon elements
+    this.compassViewport = document.getElementById('compass-viewport');
+    this.compassTrack = document.getElementById('compass-track');
+    this.compassWaypoint = document.getElementById('compass-waypoint');
+    this.compassDistEl = document.getElementById('compass-dist');
+
+    // v6.0 RTL Objective & Chapter Card elements
+    this.chapterLabelEl = document.getElementById('hud-chapter-label');
+    this.objectiveTextEl = document.getElementById('hud-objective-text');
+    this.stepPipsEl = document.getElementById('hud-step-pips');
     this.clockEl = document.getElementById('hud-clock');
     this.sunIconEl = document.getElementById('hud-sun-icon');
     this.fpsEl = document.getElementById('hud-fps-counter');
 
+    // Discovery Modal elements
+    this.discoveryTagEl = document.getElementById('discovery-tag');
+    this.discoveryTitleEl = document.getElementById('discovery-title');
+    this.discoveryBodyEl = document.getElementById('discovery-body');
+    this._discoveryCallback = null;
+    this.isDiscoveryOpen = false;
+
+    // Reticle & Action Cluster
     this.reticleDot = document.getElementById('reticle-dot');
     this.mobileInteractBtn = document.getElementById('btn-mobile-interact');
     this.mobileInteractText = document.getElementById('mobile-interact-text');
@@ -34,6 +81,7 @@ export class UIManager {
     this.onStartGame = null;
     this.onInteract = null;
     this.onPauseToggle = null;
+    this.onDiscoveryToggle = null;
     this.onReturnToTitle = null;
     this.onFreeRoam = null;
     this.onReplayJourney = null;
@@ -42,12 +90,42 @@ export class UIManager {
     this._portraitDismissed = false;
     this.isModalOpen = false;
     this.inGameplay = false;
+    this._lastCompassX = null;
+    this._lastWpX = null;
+    this._lastDistText = '';
+    this._lastInteractId = null;
 
+    this._buildCompassTrack();
     this._bindButtons();
     this._bindFullscreenMonitor();
     this._syncSettingsUI();
     this._checkOrientation();
     window.addEventListener('resize', () => this._checkOrientation());
+  }
+
+  _buildCompassTrack() {
+    if (!this.compassTrack) return;
+    this.compassTrack.innerHTML = '';
+    // Build 3 full 360° cycles (-360° to +720°) so any heading 0..360° slides cleanly with zero wrap jump!
+    const frag = document.createDocumentFragment();
+    for (let cycle = -1; cycle <= 1; cycle++) {
+      for (const tick of COMPASS_TICKS) {
+        const deg = tick.deg + cycle * 360;
+        const el = document.createElement('span');
+        el.className = tick.cardinal
+          ? 'c-tick c-cardinal'
+          : tick.major
+            ? 'c-tick c-inter'
+            : 'c-tick c-minor';
+        el.style.left = `${(deg + 360) * COMPASS_PX_PER_DEG}px`;
+        if (tick.label) {
+          el.textContent = tick.label;
+        }
+        frag.appendChild(el);
+      }
+    }
+    this.compassTrack.appendChild(frag);
+    this.compassTrack.style.width = `${1080 * COMPASS_PX_PER_DEG}px`;
   }
 
   async enterMandatoryFullscreen() {
@@ -66,7 +144,7 @@ export class UIManager {
     }
 
     this.fullscreenGate?.classList.remove('active');
-    setTimeout(() => this.fullscreenGate?.classList.add('hidden'), 380);
+    setTimeout(() => this.fullscreenGate?.classList.add('hidden'), 360);
     this.showTitleScreen();
   }
 
@@ -77,7 +155,6 @@ export class UIManager {
     };
     document.addEventListener('fullscreenchange', syncFsButton);
     document.addEventListener('webkitfullscreenchange', syncFsButton);
-
     this.restoreFsBtn?.addEventListener('click', () => this.enterMandatoryFullscreen());
   }
 
@@ -106,21 +183,28 @@ export class UIManager {
 
     const closeSettings = () => {
       this.settingsModal?.classList.add('hidden');
-      this.isModalOpen = false;
+      this.isModalOpen = this.isDiscoveryOpen;
       this.onPauseToggle?.(false);
     };
     document.getElementById('btn-close-settings')?.addEventListener('click', closeSettings);
     document.getElementById('btn-resume-from-settings')?.addEventListener('click', closeSettings);
 
     this.returnTitleBtn?.addEventListener('click', () => {
+      this.closeDiscoveryModal(false);
       closeSettings();
       this.onReturnToTitle?.();
+    });
+
+    // Discovery Modal close button
+    document.getElementById('btn-close-discovery')?.addEventListener('click', () => {
+      this.closeDiscoveryModal(true);
     });
 
     // Quick Stage Jump buttons inside Settings & Ending screen
     document.querySelectorAll('[data-jump-stage]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const targetStage = Number(btn.dataset.jumpStage);
+        this.closeDiscoveryModal(false);
         closeSettings();
         this.endingScreen?.classList.add('hidden');
         this.endingScreen?.classList.remove('active');
@@ -136,12 +220,15 @@ export class UIManager {
     });
     const closeControls = () => {
       this.controlsModal?.classList.add('hidden');
-      this.isModalOpen = false;
+      this.isModalOpen = this.isDiscoveryOpen;
     };
     document.getElementById('btn-close-controls')?.addEventListener('click', closeControls);
     document.getElementById('btn-ok-controls')?.addEventListener('click', closeControls);
 
-    this.mobileInteractBtn?.addEventListener('click', () => this.onInteract?.());
+    this.mobileInteractBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onInteract?.();
+    });
 
     document.getElementById('btn-free-roam')?.addEventListener('click', () => {
       this.endingScreen?.classList.add('hidden');
@@ -162,11 +249,20 @@ export class UIManager {
     });
 
     window.addEventListener('keydown', (e) => {
+      if (this.isDiscoveryOpen) {
+        if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
+          e.preventDefault();
+          this.closeDiscoveryModal(true);
+        }
+        return;
+      }
       if (e.code === 'KeyE' && this.inGameplay && !this.isModalOpen) {
         this.onInteract?.();
       } else if (e.code === 'Escape' && this.inGameplay) {
         if (!this.settingsModal?.classList.contains('hidden')) {
           closeSettings();
+        } else if (!this.controlsModal?.classList.contains('hidden')) {
+          closeControls();
         } else if (!this.isModalOpen) {
           this.openSettings(true);
         }
@@ -270,6 +366,7 @@ export class UIManager {
 
   showTitleScreen() {
     this.inGameplay = false;
+    this.closeDiscoveryModal(false);
     this.hudLayer?.classList.add('hidden');
     this.endingScreen?.classList.add('hidden');
     this.endingScreen?.classList.remove('active');
@@ -279,7 +376,7 @@ export class UIManager {
 
   hideTitleScreen() {
     this.titleScreen?.classList.remove('active');
-    setTimeout(() => this.titleScreen?.classList.add('hidden'), 420);
+    setTimeout(() => this.titleScreen?.classList.add('hidden'), 400);
   }
 
   showHUD() {
@@ -301,8 +398,34 @@ export class UIManager {
     if (fromGameplay) this.onPauseToggle?.(true);
   }
 
+  openDiscoveryModal(tag, title, body, onClose = null) {
+    if (document.pointerLockElement) document.exitPointerLock?.();
+    if (this.discoveryTagEl) this.discoveryTagEl.textContent = tag || '';
+    if (this.discoveryTitleEl) this.discoveryTitleEl.textContent = title || '';
+    if (this.discoveryBodyEl) this.discoveryBodyEl.textContent = body || '';
+    this._discoveryCallback = onClose;
+    this.isDiscoveryOpen = true;
+    this.isModalOpen = true;
+    this.discoveryModal?.classList.remove('hidden');
+    this.onDiscoveryToggle?.(true);
+  }
+
+  closeDiscoveryModal(invokeCallback = true) {
+    if (!this.isDiscoveryOpen) return;
+    this.isDiscoveryOpen = false;
+    this.discoveryModal?.classList.add('hidden');
+    this.isModalOpen = !this.settingsModal?.classList.contains('hidden');
+    this.onDiscoveryToggle?.(false);
+    const cb = this._discoveryCallback;
+    this._discoveryCallback = null;
+    if (invokeCallback && typeof cb === 'function') {
+      cb();
+    }
+  }
+
   showEndingScreen() {
     this.inGameplay = false;
+    this.closeDiscoveryModal(false);
     this.hideHUD();
     this.endingScreen?.classList.remove('hidden');
     requestAnimationFrame(() => this.endingScreen?.classList.add('active'));
@@ -315,52 +438,78 @@ export class UIManager {
     this.flashlightBtn.setAttribute('aria-pressed', String(Boolean(isOn)));
   }
 
-  updateMission(text, distText, arrowDeg = null) {
-    if (this.missionTextEl && this.missionTextEl.textContent !== text) {
-      this.missionTextEl.textContent = text;
+  /**
+   * Updates the redesigned v6.0 Top-Right Objective Card, Clock/Icon & Chapter Progress Pips
+   */
+  updateStageHUD({ stageId, chapterLabel, timeLabel, sunIcon, objective, stepIndex, totalSteps }) {
+    if (this.chapterLabelEl) this.chapterLabelEl.textContent = chapterLabel || '';
+    if (this.objectiveTextEl) this.objectiveTextEl.textContent = objective || '';
+
+    if (this.clockEl) this.clockEl.textContent = timeLabel || '';
+    if (this.sunIconEl) {
+      this.sunIconEl.textContent = sunIcon || '☀';
+      const col =
+        stageId === 4 ? '#9ec6ff' : stageId === 3 ? '#ff8b54' : stageId === 2 ? '#ffbe66' : '#ffe38d';
+      this.sunIconEl.style.color = col;
     }
-    if (this.missionArrowEl) {
-      if (arrowDeg !== null && Number.isFinite(arrowDeg)) {
-        const rounded = Math.round(arrowDeg);
-        if (rounded !== this._lastArrowDeg) {
-          this._lastArrowDeg = rounded;
-          this.missionArrowEl.style.transform = `rotate(${rounded}deg)`;
-        }
-        if (this._arrowHidden !== false) {
-          this._arrowHidden = false;
-          this.missionArrowEl.classList.remove('hidden');
-        }
-      } else if (this._arrowHidden !== true) {
-        this._arrowHidden = true;
-        this.missionArrowEl.classList.add('hidden');
-      }
-    }
-    if (this.missionDistEl) {
-      if (distText) {
-        if (this._lastDistText !== distText) {
-          this._lastDistText = distText;
-          this.missionDistEl.textContent = distText;
-        }
-        if (this._distHidden !== false) {
-          this._distHidden = false;
-          this.missionDistEl.classList.remove('hidden');
-        }
-      } else if (this._distHidden !== true) {
-        this._distHidden = true;
-        this.missionDistEl.classList.add('hidden');
+
+    if (this.stepPipsEl && totalSteps > 0) {
+      this.stepPipsEl.innerHTML = '';
+      for (let i = 0; i < totalSteps; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'step-pip';
+        if (i < stepIndex) pip.classList.add('done');
+        else if (i === stepIndex) pip.classList.add('active');
+        this.stepPipsEl.appendChild(pip);
       }
     }
   }
 
-  updateClock(clockText, stageId, icon = '☀') {
-    if (this.clockEl && this._lastClockText !== clockText) {
-      this._lastClockText = clockText;
-      this.clockEl.textContent = clockText;
+  /**
+   * Slides the top Architectural Compass Ribbon (GPU translate3d only, zero layout thrash!)
+   * and positions the golden Waypoint Diamond + distance indicator.
+   */
+  updateCompass(playerYaw, relTargetRad, distText) {
+    if (this.compassTrack && this.compassViewport) {
+      const vw = this.compassViewport.clientWidth || 320;
+      const headingDeg = (((-playerYaw * 180) / Math.PI) % 360 + 360) % 360;
+      const centerPixel = (headingDeg + 360) * COMPASS_PX_PER_DEG;
+      const tx = Math.round((vw * 0.5 - centerPixel) * 2) * 0.5;
+      if (tx !== this._lastCompassX) {
+        this._lastCompassX = tx;
+        this.compassTrack.style.transform = `translate3d(${tx}px, 0, 0)`;
+      }
     }
-    if (this.sunIconEl) {
-      this.sunIconEl.textContent = icon;
-      const col = stageId === 4 ? '#a6c8ff' : stageId === 3 ? '#ff7d47' : stageId === 2 ? '#ffb85c' : '#ffe28a';
-      this.sunIconEl.style.color = col;
+
+    if (this.compassWaypoint && this.compassViewport) {
+      if (relTargetRad !== null && Number.isFinite(relTargetRad)) {
+        const vw = this.compassViewport.clientWidth || 320;
+        const relDeg = (relTargetRad * 180) / Math.PI;
+        const maxOffset = vw * 0.44;
+        const rawOffset = relDeg * COMPASS_PX_PER_DEG;
+        const clamped = Math.max(-maxOffset, Math.min(maxOffset, rawOffset));
+        const px = Math.round(clamped * 2) * 0.5;
+        this.compassWaypoint.classList.remove('hidden');
+        this.compassWaypoint.classList.toggle('clamped-edge', Math.abs(rawOffset) > maxOffset);
+        if (px !== this._lastWpX) {
+          this._lastWpX = px;
+          this.compassWaypoint.style.transform = `translate3d(${px}px, 0, 0)`;
+        }
+      } else {
+        this.compassWaypoint.classList.add('hidden');
+      }
+    }
+
+    if (this.compassDistEl) {
+      if (distText) {
+        if (this._lastDistText !== distText) {
+          this._lastDistText = distText;
+          this.compassDistEl.textContent = distText;
+        }
+        this.compassDistEl.classList.remove('hidden');
+      } else {
+        this.compassDistEl.classList.add('hidden');
+      }
     }
   }
 
